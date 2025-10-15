@@ -26,7 +26,7 @@ https://github.com/amusecode/amuse/blob/ce21df1cc58297c0e3ab0d7afa3b4ed2fa4cea24
 [Tutorial for Simulating Ultra Compact Dwarf Galaxies](https://github.com/amusecode/amuse/blob/main/examples/tutorial/tutorial.pdf)
 
 ## ToDos:
-- read 4th chapter of a book
+- read 4th chapter of a book  + 3.2.1 Initial condition for gravitational dynamics
 - do the 8th tutorial
 - understand lonely planets
 
