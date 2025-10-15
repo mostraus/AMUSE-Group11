@@ -27,4 +27,5 @@ https://github.com/amusecode/amuse/blob/ce21df1cc58297c0e3ab0d7afa3b4ed2fa4cea24
 - do the 8th tutorial
 - understand lonely planets
 
-- Find core question we want to answer
+- Find core question we want to answer: What types of planetary systems can survive tidal disruption of the parent galaxy?
+                                        (At what timescale does tidal stripping occur?)
