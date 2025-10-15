@@ -12,6 +12,14 @@ Code and Content regarding the AMUSE Project from Group 11
 
 **Why interesting**: Connects exoplanet survival to galactic dynamics.
 
+## Notes
+- Run stage 1 of LonelyPlanets
+- Star cluster in potential of galaxy
+- Build database of encounters
+- Stage 2: planetary system + stars
+- Bridge the 2 codes (hydro code for disk + N-body code for star)
+- How is a protoplanetary disk perturbed by stellar cluster?
+
 ## Code
 [LonelyPlanets](https://github.com/spzwart/LonelyPlanets)
 
