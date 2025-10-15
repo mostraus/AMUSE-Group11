@@ -25,6 +25,6 @@ https://github.com/amusecode/amuse/blob/ce21df1cc58297c0e3ab0d7afa3b4ed2fa4cea24
 ## ToDos:
 - read 4th chapter of a book
 - do the 8th tutorial
-- 
+- understand lonely planets
 
 - Find core question we want to answer
