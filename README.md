@@ -19,6 +19,9 @@ Relevant papers that use LonelyPlanets:
 - [The signatures of the parental cluster on field planetary
 systems](https://arxiv.org/pdf/1711.01274)
 
+Link for Example Codes:
+https://github.com/amusecode/amuse/blob/ce21df1cc58297c0e3ab0d7afa3b4ed2fa4cea24/examples/simple/orbit_in_potential.py
+
 ## ToDos:
 - read 4th chapter of a book
 - do the 8th tutorial
