@@ -20,4 +20,8 @@ Relevant papers that use LonelyPlanets:
 systems](https://arxiv.org/pdf/1711.01274)
 
 ## ToDos:
+- read 4th chapter of a book
+- do the 8th tutorial
+- 
+
 - Find core question we want to answer
