@@ -12,7 +12,8 @@ Code and Content regarding the AMUSE Project from Group 11
 
 **Why interesting**: Connects exoplanet survival to galactic dynamics.
 
-Code: [LonelyPlanets](https://github.com/spzwart/LonelyPlanets)
+## Code
+[LonelyPlanets](https://github.com/spzwart/LonelyPlanets)
 
 Relevant papers that use LonelyPlanets:
 - [Stability of Multiplanetary Systems in Star Clusters](https://arxiv.org/pdf/1706.03789)
@@ -21,6 +22,8 @@ systems](https://arxiv.org/pdf/1711.01274)
 
 Link for Example Codes:
 https://github.com/amusecode/amuse/blob/ce21df1cc58297c0e3ab0d7afa3b4ed2fa4cea24/examples/simple/orbit_in_potential.py
+
+[Tutorial for Simulating Ultra Compact Dwarf Galaxies](https://github.com/amusecode/amuse/blob/main/examples/tutorial/tutorial.pdf)
 
 ## ToDos:
 - read 4th chapter of a book
