@@ -20,6 +20,17 @@ def make_cluster_plummer(N_stars, plummer_radius):
     return cluster
 
 
+def calc_internal_energy(cluster):
+    internal_cluster_state = cluster.copy()
+    internal_cluster_state.position -= cluster.center_of_mass()
+    internal_cluster_state.velocity -= cluster.center_of_mass_velocity()
+    
+    potential_energy = internal_cluster_state.potential_energy()
+    kinetic_energy = internal_cluster_state.kinetic_energy()
+    total_internal_energy = potential_energy + kinetic_energy
+    return total_internal_energy
+
+
 def setup(galaxy, cluster, vel=[0,-210,0] | units.kms, N_stars=10, pos=[8.5, 0, 0] | units.kpc):    
     # 3. Set the cluster's initial orbital position and velocity
     # We move the entire cluster to the starting point of the single star
@@ -51,10 +62,17 @@ def run(gravity_cluster, ch_gc2l, N_stars, cluster, length=250, timestep=1):
 
     # Use a dictionary to store paths: {star_index: [[x_list], [y_list]]}
     trajectories = {i: ([], []) for i in range(N_stars)}
+    printed = False
+    int_Es = []
 
     for time in times:
         gravity_cluster.evolve_model(time)
         ch_gc2l.copy()  # Update particle info in the script
+        int_E = calc_internal_energy(cluster).value_in(units.J)
+        int_Es.append(int_E)
+        if (int_E > 0 and not printed):
+            print(time)
+            printed = True
         
         # Loop through each star and record its position
         for i in range(N_stars):
@@ -63,6 +81,9 @@ def run(gravity_cluster, ch_gc2l, N_stars, cluster, length=250, timestep=1):
 
     print("Simulation finished, cleaning up.")
     gravity_cluster.stop()
+    pyplot.plot(times.value_in(units.Myr), int_Es)
+    pyplot.xlabel("Time")
+    pyplot.ylabel("Internal Energy")
     return trajectories
 
 
@@ -88,3 +109,4 @@ def plot(trajectories, N_stars, cluster_pos):
     pyplot.grid(True)
     pyplot.legend()
     pyplot.show()
+
