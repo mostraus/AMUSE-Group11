@@ -20,6 +20,12 @@ Code and Content regarding the AMUSE Project from Group 11
 - Bridge the 2 codes (hydro code for disk + N-body code for star)
 - How is a protoplanetary disk perturbed by stellar cluster?
 
+- check only if stars come closer than 2*RHill (check if it comes in perturbing distance)
+- calc disk during encounter, then freeze until next (fast forward)
+- write LonelyPlanets ourselves, save close encounters of certain stars with stopping condition
+- no bridging, just hydro code (can do gravity too, just "sloppier")
+- during encounter hydro, than check if disk is ok, jump to next encounter
+
 ## Code
 [LonelyPlanets](https://github.com/spzwart/LonelyPlanets)
 
@@ -46,3 +52,6 @@ https://github.com/amusecode/amuse/blob/ce21df1cc58297c0e3ab0d7afa3b4ed2fa4cea24
 ## Info maybe usfull in future 
 - GalactICs (Kuijken & Dubinski, 1995), which is designed to set up a selfconsistent galaxy model with a disk, bulge, and dark halo - in book 4.4.5 Merging Galaxies
 
+
+## Grading:
+1 star, "evolution of disk over time"- plot
