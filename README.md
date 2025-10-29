@@ -18,15 +18,24 @@ Code and Content regarding the AMUSE Project from Group 11
 - Build database of encounters
 - Choose interesting star
 - Stage 2: planetary system + 2 stars
-- JUst hydro code there (it have some gravity alerady involed)
+- Just hydro code there (it has some gravity already involed)
 - How is a protoplanetary disk perturbed by stellar cluster?
 
-- check only if stars come closer than 2*RHill (check if it comes in perturbing distance)
-- calc disk during encounter, then freeze until next (fast forward)
-- write LonelyPlanets ourselves, save close encounters of certain stars with stopping condition
-- no bridging, just hydro code (can do gravity too, just "sloppier")
-- during encounter hydro, than check if disk is ok, jump to next encounter
-- if problem with star getting bound just skip it 
+**Details**:
+- write script for star cluster ($N=1000$?)
+- brdige star cluster's evolution with tidal tail of galaxy (gravity + hydro)
+- check only if stars come closer than $2\,R_\text{Hill}$ (check if it comes within perturbing distance)
+- calculate disk during encounter, then freeze until next (fast forward)
+- write LonelyPlanets ourselves, save close encounters of certain stars (maybe 10?) with stopping condition
+- no bridging, just hydro code (can do self-gravity too, just "sloppier")
+- during encounter hydro, then check if disk is ok, jump to next encounter
+- if there's a problem with star getting bound, just skip it
+
+- **Desired code**:
+  - **Stage 1**: run star cluster evolution
+  - **Stage 2**: do hydro calculations of encounters
+ 
+- **Desired plot**: distribution of particles of 1 interesting star as function of time during encounter 
 
 ## Code
 [LonelyPlanets](https://github.com/spzwart/LonelyPlanets)
