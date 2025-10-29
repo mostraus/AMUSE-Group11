@@ -1,16 +1,16 @@
 # AMUSE-Group11
 Code and Content regarding the AMUSE Project from Group 11
 
-## Topic: The survival of planetary systems in dwarf galaxy tidal streams
-**Motivation**: Globular clusters and dwarf galaxies are tidally stripped; some stars with planets may end up in tidal streams.
+## Topic: The survival of protoplanetary disks in galaxy tidal streams
+**Motivation**: Star clusters and galaxies are tidally stripped; some stars with protoplanetary disk may end up in tidal streams.
 
-**Question**: Can planets around stripped stars survive the tidal disruption and ejection into the Galactic halo?
+**Question**: Can protoplanetary disk around stripped stars survive the tidal disruption and ejection into the Galactic halo?
 
-**AMUSE use**: N-body for star–planet systems embedded in cluster/dwarf potential + Galactic tidal field.
+**AMUSE use**: N-body for star cluster and galaxy, hydro for interactions in galaxy potential and encounters.
 
-**Deliverables**: Survival fraction of planets vs. cluster mass, stream orbit, and initial planet distribution.
+**Deliverables**: Survival of disks, number of encounters, distribution of disk particles during encounter.
 
-**Why interesting**: Connects exoplanet survival to galactic dynamics.
+**Why interesting**: Connects disk survival to galactic dynamics.
 
 ## Notes
 - Run stage 1 of LonelyPlanets 
@@ -24,7 +24,7 @@ Code and Content regarding the AMUSE Project from Group 11
 **Details**:
 - write script for star cluster ($N=1000$?)
 - brdige star cluster's evolution with tidal tail of galaxy (gravity + hydro)
-- check only if stars come closer than $2\,R_\text{Hill}$ (check if it comes within perturbing distance)
+- check only if stars come closer than $2~R_\text{Hill}$ (check if it comes within perturbing distance)
 - calculate disk during encounter, then freeze until next (fast forward)
 - write LonelyPlanets ourselves, save close encounters of certain stars (maybe 10?) with stopping condition
 - no bridging, just hydro code (can do self-gravity too, just "sloppier")
@@ -53,7 +53,7 @@ https://github.com/amusecode/amuse/blob/ce21df1cc58297c0e3ab0d7afa3b4ed2fa4cea24
 ## ToDos:
 - read 4th chapter of a book  + 3.2.1 Initial condition for gravitational dynamics
 - do the 8th tutorial
-- understand lonely planets
+- understand LonelyPlanets
 
 - Find core question we want to answer: What types of planetary systems can survive tidal disruption of the parent galaxy?
                                         (At what timescale does tidal stripping occur?)
