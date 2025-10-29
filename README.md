@@ -13,11 +13,12 @@ Code and Content regarding the AMUSE Project from Group 11
 **Why interesting**: Connects exoplanet survival to galactic dynamics.
 
 ## Notes
-- Run stage 1 of LonelyPlanets
+- Run stage 1 of LonelyPlanets 
 - Star cluster in potential of galaxy
 - Build database of encounters
-- Stage 2: planetary system + stars
-- Bridge the 2 codes (hydro code for disk + N-body code for star)
+- Choose interesting star
+- Stage 2: planetary system + 2 stars
+- JUst hydro code there (it have some gravity alerady involed)
 - How is a protoplanetary disk perturbed by stellar cluster?
 
 - check only if stars come closer than 2*RHill (check if it comes in perturbing distance)
@@ -25,6 +26,7 @@ Code and Content regarding the AMUSE Project from Group 11
 - write LonelyPlanets ourselves, save close encounters of certain stars with stopping condition
 - no bridging, just hydro code (can do gravity too, just "sloppier")
 - during encounter hydro, than check if disk is ok, jump to next encounter
+- if problem with star getting bound just skip it 
 
 ## Code
 [LonelyPlanets](https://github.com/spzwart/LonelyPlanets)
