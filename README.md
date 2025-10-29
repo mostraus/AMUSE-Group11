@@ -17,14 +17,15 @@ Code and Content regarding the AMUSE Project from Group 11
 - Star cluster in potential of galaxy
 - Build database of encounters
 - Choose interesting star
-- Stage 2: planetary system + 2 stars
+- Stage 2: protoplanetary disk + 2 stars
 - Just hydro code there (it has some gravity already involed)
 - How is a protoplanetary disk perturbed by stellar cluster?
 
 **Details**:
 - write script for star cluster ($N=1000$?)
-- brdige star cluster's evolution with tidal tail of galaxy (gravity + hydro)
+- bridge star cluster's evolution with tidal tail of galaxy (gravity + hydro)
 - check only if stars come closer than $2~R_\text{Hill}$ (check if it comes within perturbing distance)
+- build database of encounters
 - calculate disk during encounter, then freeze until next (fast forward)
 - write LonelyPlanets ourselves, save close encounters of certain stars (maybe 10?) with stopping condition
 - no bridging, just hydro code (can do self-gravity too, just "sloppier")
