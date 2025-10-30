@@ -81,9 +81,9 @@ def run(gravity_cluster, ch_gc2l, N_stars, cluster, length=250, timestep=1):
 
     print("Simulation finished, cleaning up.")
     gravity_cluster.stop()
-    pyplot.plot(times.value_in(units.Myr), int_Es)
-    pyplot.xlabel("Time")
-    pyplot.ylabel("Internal Energy")
+    #pyplot.plot(times.value_in(units.Myr), int_Es)
+    #pyplot.xlabel("Time")
+    #pyplot.ylabel("Internal Energy")
     return trajectories
 
 
@@ -109,4 +109,7 @@ def plot(trajectories, N_stars, cluster_pos):
     pyplot.grid(True)
     pyplot.legend()
     pyplot.show()
+
+
+def plot_time_vs_evolution(trajectories):
 
