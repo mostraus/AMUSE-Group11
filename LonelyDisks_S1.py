@@ -9,7 +9,7 @@ from galaxy_potentials import MilkyWay_galaxy
 from cluster_creator import make_cluster_plummer
 
 
-def simulate_cluster(galaxy_potential, Nstars, R_ini, pos_ini, vel_ini, times):
+def simulate_cluster(galaxy_potential, Nstars, R_ini, pos_ini, vel_ini, timesL):
 
     cluster = make_cluster_plummer(N_stars=Nstars, plummer_radius=R_ini)
     cluster.position += pos_ini
@@ -40,8 +40,7 @@ def simulate_cluster(galaxy_potential, Nstars, R_ini, pos_ini, vel_ini, times):
     return trajectories, cluster_history
 
 
-def plot_cluster_in_galaxy(trajectories, pos_ini, Nstars):
-    fig, ax = plt.subplots(figsize=(6,6))
+def plot_cluster_in_galaxy(trajectories, pos_ini, Nstars, ax):
     for i in range(Nstars):
         ax.plot(trajectories[i][0], trajectories[i][1])
     pos_ini = pos_ini.value_in(units.kpc)
@@ -50,12 +49,18 @@ def plot_cluster_in_galaxy(trajectories, pos_ini, Nstars):
     ax.set_ylabel("y [kpc]")
     ax.legend()
     ax.set_title("Cluster Motion")
-    plt.show()
 
 
-def plot_cluster_evolution(trajectories, times, cluster_history):
-    COMs = [for ]
-    fig, ax = plt.subplots(figsize=(6,6))
+def plot_cluster_evolution(trajectories, times, cluster_history, Nstars, ax):
+    COMs = [cluster.center_of_mass() for cluster in cluster_history]
+    for i in range(Nstars):
+        traj_x = np.array(trajectories[i][0]) - np.array([COM.x.value_in(units.kpc) for COM in COMs])
+        traj_y = np.array(trajectories[i][1]) - np.array([COM.y.value_in(units.kpc) for COM in COMs])
+        ax.scatter(traj_x, times.value_in(units.Myr), traj_y)
+    ax.set_xlabel('X [kpc]')
+    ax.set_ylabel('Time [Myr]')
+    ax.set_zlabel('Y [kpc]')
+    ax.set_title("Cluster Evolution")
 
 
 
@@ -66,15 +71,20 @@ def main():
     INITIAL_RADIUS = 10     # in pc
 
     INITIAL_POS = [8.5, 0, 0] | units.kpc
-    INITIAL_VEL = [0, 210, 0] | units.kms
+    INITIAL_VEL = [0, 10, 0] | units.kms
 
-    time_end = 10   # Myr
+    time_end = 100   # Myr
     timestep = 1    # Myr
     TIMES = np.arange(0., time_end, timestep) | units.Myr
 
     trajectories, cluster_history = simulate_cluster(MWG, NSTARS, INITIAL_RADIUS, INITIAL_POS, INITIAL_VEL, TIMES)
-    print(cluster_history[0].x)
-    plot_cluster_in_galaxy(trajectories, INITIAL_POS, NSTARS)
+    fig, ax = plt.subplots(figsize=(12,6))
+    ax1 = fig.add_subplot(1,2,1)
+    ax2 = fig.add_subplot(1,2,2,projection='3d')
+    plot_cluster_in_galaxy(trajectories, INITIAL_POS, NSTARS, ax1)
+    plot_cluster_evolution(trajectories, TIMES, cluster_history, NSTARS, ax2)
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
     main()
