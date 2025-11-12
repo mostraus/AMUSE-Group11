@@ -59,7 +59,7 @@ https://github.com/amusecode/amuse/blob/ce21df1cc58297c0e3ab0d7afa3b4ed2fa4cea24
 - Find core question we want to answer: What types of planetary systems can survive tidal disruption of the parent galaxy?
                                         (At what timescale does tidal stripping occur?)
 
-##Initial conditions 
+## Initial conditions 
 - number of stars in claster - typically 100-10000 but smaller more popular 
 - maximum and minimum mases of a stars in a claster - set for now 1 to 30
 - type of model to make a cluster - new_fractal_cluster_model? 
@@ -74,6 +74,14 @@ https://github.com/amusecode/amuse/blob/ce21df1cc58297c0e3ab0d7afa3b4ed2fa4cea24
 ## Info maybe usfull in future 
 - GalactICs (Kuijken & Dubinski, 1995), which is designed to set up a selfconsistent galaxy model with a disk, bulge, and dark halo - in book 4.4.5 Merging Galaxies
 
+## Papers 
+https://arxiv.org/abs/2207.09752
+https://ui.adsabs.harvard.edu/abs/2019PhDT........53N/abstract
+https://arxiv.org/abs/2310.03327
+https://www.aanda.org/articles/aa/full_html/2014/05/aa23124-13/aa23124-13.html
+https://academic.oup.com/mnras/article/290/3/490/996086?login=true
+https://www.aanda.org/articles/aa/full_html/2014/05/aa23124-13/aa23124-13.html
+https://academic.oup.com/mnras/article/536/1/298/7911845?login=true
 
 ## Grading:
 1 star, "evolution of disk over time"- plot
