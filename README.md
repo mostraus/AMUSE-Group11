@@ -64,24 +64,24 @@ https://github.com/amusecode/amuse/blob/ce21df1cc58297c0e3ab0d7afa3b4ed2fa4cea24
 - maximum and minimum mases of a stars in a claster - set for now 1 to 30
 - type of model to make a cluster - new_fractal_cluster_model? 
 - velocities of a cluster - 3 parameters
-- position of a cluster  - 3 parameters
+- position of a cluster - 3 parameters
 - size of a cluster - for now 1 kpc 
 
-- hill size radius? 100-1000au
+- hill radius? 100-1000 au
 
 
  - 
-## Info maybe usfull in future 
-- GalactICs (Kuijken & Dubinski, 1995), which is designed to set up a selfconsistent galaxy model with a disk, bulge, and dark halo - in book 4.4.5 Merging Galaxies
+## Info maybe useful in future 
+- GalactICs (Kuijken & Dubinski, 1995), which is designed to set up a self-consistent galaxy model with a disk, bulge, and dark halo - in book 4.4.5 Merging Galaxies
 
 ## Papers 
-https://arxiv.org/abs/2207.09752
-https://ui.adsabs.harvard.edu/abs/2019PhDT........53N/abstract
-https://arxiv.org/abs/2310.03327
-https://www.aanda.org/articles/aa/full_html/2014/05/aa23124-13/aa23124-13.html
-https://academic.oup.com/mnras/article/290/3/490/996086?login=true
-https://www.aanda.org/articles/aa/full_html/2014/05/aa23124-13/aa23124-13.html
-https://academic.oup.com/mnras/article/536/1/298/7911845?login=true
+- https://arxiv.org/abs/2207.09752
+- https://ui.adsabs.harvard.edu/abs/2019PhDT........53N/abstract
+- https://arxiv.org/abs/2310.03327
+- https://www.aanda.org/articles/aa/full_html/2014/05/aa23124-13/aa23124-13.html
+- https://academic.oup.com/mnras/article/290/3/490/996086?login=true
+- https://www.aanda.org/articles/aa/full_html/2014/05/aa23124-13/aa23124-13.html
+- https://academic.oup.com/mnras/article/536/1/298/7911845?login=true
 
-## Grading:
+## Grading
 1 star, "evolution of disk over time"- plot
