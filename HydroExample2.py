@@ -1,6 +1,7 @@
 from amuse.lab import *
 import numpy as np
 from matplotlib import pyplot as plt
+from matplotlib import animation
 from amuse.couple import bridge
 # from amuse.ext.orbital_elements import orbital_elements_from_binary # No longer needed
 from amuse.ext.protodisk import ProtoPlanetaryDisk
@@ -8,6 +9,14 @@ import os.path
 import csv
 import pandas as pd
 from pathlib import Path
+
+
+def get_radius_from_mass(mass):
+    Ms = 1 | units.MSun
+    if mass > Ms:
+        return (mass / Ms)**0.8 | units.RSun
+    else:
+        return (mass / Ms)**0.57 | units.RSun
 
 
 def read_interactions_file(filename="interactions.csv"):
@@ -35,23 +44,35 @@ def read_interactions_file(filename="interactions.csv"):
 def get_initial_values(filename, main_character_star_idx, interaction_id=0):
     stars_dict = read_interactions_file(filename)
     interactions = stars_dict[main_character_star_idx]
-    star1_id = interactions[interaction_id]["star_i"]            # mass and radius are sufficient
-    star2_id = interactions[interaction_id]["star_j"]            # mass and radius are sufficient
-    time_id = interactions[interaction_id]["time_index"]         # should be absolute time
-    rel_dist = interactions[interaction_id]["distance_pc"]       # should be a vector with rel_x, rel_y, rel_z
-    rel_vel = interactions[interaction_id]["rel_velocity_kms"]   # should also be a vector with rel_vx, rel_vy, rel_vz
-
+    arr = interactions[interaction_id]
+    star1_id = arr["star_i"]            
+    star2_id = arr["star_j"]
+    time = arr["time "] | units.Myr
+    rel_dx_pc = float(arr["relative_dx_pc"][1:-1])  # | units.pc
+    rel_dy_pc = float(arr["relative_dy_pc"][1:-1])  # | units.pc
+    rel_dz_pc = float(arr["relative_dz_pc"][1:-1])  # | units.pc
+    rel_dvx_kms = float(arr["relative_dvx_kms"][1:-1])  # | units.kms
+    rel_dvy_kms = float(arr["relative_dvy_kms"][1:-1])  # | units.kms
+    rel_dvz_kms = float(arr["relative_dvz_kms"][1:-1])  # | units.kms
+    #rel_dist = arr["distance_pc"]    
+    mass_1 = arr["mass_star_i_MSun"] | units.MSun
+    mass_2 = arr["mass_star_j_MSun"] | units.MSun
+    #mass_ratio = arr["mass_ratio"]
+     
+    #rel_dist_vec = units.quantities.new_quantity([rel_dx_pc, rel_dy_pc, rel_dz_pc], units.pc) #| units.pc
+    rel_dist_vec = [rel_dx_pc, rel_dy_pc, rel_dz_pc] | units.pc
+    rel_vel_vec = [rel_dvx_kms, rel_dvy_kms, rel_dvz_kms] | units.kms
     ########### THESE VALUES ONLY FOR NOW UNTIL FILE IS ADJUSTED ###########
-    mass_1 = 1 | units.MSun
-    mass_2 = 2 | units.MSun
-    radius_1 = 1 | units.RSun
-    radius_2 = 1 | units.RSun
-    time = 0 | units.Myr
-    rel_dist_vec = [-200, 100, 0] | units.AU
-    rel_vel_vec = [5, 0, 0] | units.kms
+    #mass_1 = 1 | units.MSun
+    #mass_2 = 20| units.MSun
+    radius_1 = get_radius_from_mass(mass_1)     # 1 | units.RSun
+    radius_2 = get_radius_from_mass(mass_2)     # 1 | units.RSun
+    #time = 0 | units.Myr
+    #rel_dist_vec = [-500, 300, 0] | units.AU
+    #rel_vel_vec = [5, 0, 0] | units.kms
     ########################################################################
 
-    return mass_1, mass_2, radius_1, radius_2, time, rel_dist_vec, rel_vel_vec
+    return star1_id, star2_id, mass_1, mass_2, radius_1, radius_2, time, rel_dist_vec, rel_vel_vec
 
 
 def plot_system_with_disk(stars, disk, model_time, ax):
@@ -84,9 +105,10 @@ def plot_system_with_disk(stars, disk, model_time, ax):
 
 def simulate_hydro_disk(filename, main_character_star_idx):
     # --- 0. Get values from file ---
-    M1, M2, R1, R2, T, REL_DIST, REL_VEL = get_initial_values(filename, main_character_star_idx)
+    S1id, S2id, M1, M2, R1, R2, T, REL_DIST, REL_VEL = get_initial_values(filename, main_character_star_idx)
     # --- 1. Create the Star ---
     #Mstar = 1.0 | units.MSun
+    print(REL_DIST, REL_VEL)
     star = Particles(1)
     star.mass = M1
     star.radius = R1 #1.0 | units.RSun
@@ -183,7 +205,10 @@ def simulate_hydro_disk(filename, main_character_star_idx):
     gravity.stop()
     hydro.stop()
 
-    return POSITIONS_LIST, VELOCITIES_LIST
+    info_array = np.array([T.value_in(units.Myr), S1id, S2id, t_end.value_in(units.yr), M1.value_in(units.MSun), M2.value_in(units.MSun)])    
+    # Time of cluster [Myr], Star 1 [id], Star 2 [id], duration of disk [yr], Mass 1 [MSun], Mass 2 [MSun]
+
+    return POSITIONS_LIST, VELOCITIES_LIST, info_array
 
 
 def load_and_plot_data(filename_pos, filename_vel):
@@ -220,28 +245,137 @@ def load_and_plot_data(filename_pos, filename_vel):
         ax[a,b].scatter(disk[:,0] - x0, disk[:,1] - y0, c="black", s=1, alpha=0.3)
         ax[a,b].scatter(0, 0, c='red', s=100)
         ax[a,b].scatter(star2[0] - x0, star2[1] - y0, c='blue', s=100)
-        ax[a,b].set_xlim(-250, 250)
-        ax[a,b].set_ylim(-250, 250)
+        lim = 350
+        ax[a,b].set_xlim(-lim, lim)
+        ax[a,b].set_ylim(-lim, lim)
         ax[a,b].set_xlabel("x [AU]")
         ax[a,b].set_ylabel("y [AU]")
+        ax[a,b].set_title(f"{i * plot_every_n_steps}Myr")
 
 
     plt.tight_layout()
-    fig.savefig("Plot4.png")
+    fig.savefig(f"DiskPlot{filename_pos[13:-4]}.png")
     plt.show()
+
+
+def load_and_animate_data(filename_pos, filename_vel):
+    """
+    Loads position data and creates an animation showing the evolution
+    of all time steps.
+
+    Args:
+        filename_pos (str): Path to the NumPy file containing position data.
+        filename_vel (str): Path to the NumPy file containing velocity data (unused in this function).
+    """
+    
+    # --- 1. Load Data ---
+    file_path_pos = filename_pos
+    POSITIONS_LIST = np.load(file_path_pos)
+    
+    # POSITIONS_LIST shape is assumed to be (N_particles, N_timesteps, 3)
+    N_timesteps = POSITIONS_LIST.shape[1]
+    
+    # Separate data components
+    star1_positions = POSITIONS_LIST[0, :, :]
+    star2_positions = POSITIONS_LIST[1, :, :]
+    disk_positions = POSITIONS_LIST[2:, :, :]
+    
+    # --- 2. Setup Figure and Initial Plot ---
+    fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+    lim = 300 # Set plot limits
+    ax.set_xlim(-lim, lim)
+    ax.set_ylim(-lim, lim)
+    ax.set_xlabel("x [AU]")
+    ax.set_ylabel("y [AU]")
+    ax.set_title("Hydrodynamic Disk Evolution (Time Step: 0)")
+    
+    # Initialize the plot elements
+    # Star 1 (Red, centered at 0,0 after subtraction)
+    star1_plot = ax.scatter(0, 0, c='red', s=100) 
+    
+    # Star 2 (Blue, relative to Star 1)
+    star2_plot = ax.scatter(0, 0, c='blue', s=100) 
+    
+    # Disk particles (Black/Gray)
+    disk_plot = ax.scatter([], [], c="black", s=1, alpha=0.3) 
+    
+    # Text element for time step
+    time_text = ax.text(0.05, 0.95, '', transform=ax.transAxes, fontsize=12, verticalalignment='top')
+
+
+    # --- 3. Animation Update Function ---
+    def update_frame(i):
+        """
+        Updates the plot elements for frame i.
+        """
+        # Get the position of Star 1 at the current time step i
+        x0, y0, _ = star1_positions[i]
+        
+        # --- Update Disk Particles ---
+        # Calculate disk positions relative to Star 1
+        disk_x_rel = disk_positions[:, i, 0] - x0
+        disk_y_rel = disk_positions[:, i, 1] - y0
+        
+        # Update the data in the existing scatter plot object
+        disk_plot.set_offsets(np.column_stack([disk_x_rel, disk_y_rel]))
+        
+        # --- Update Star 2 ---
+        # Calculate Star 2 position relative to Star 1
+        star2_x_rel = star2_positions[i, 0] - x0
+        star2_y_rel = star2_positions[i, 1] - y0
+        
+        # Star 1 is always at (0, 0) in the relative frame
+        star2_plot.set_offsets(np.column_stack([star2_x_rel, star2_y_rel]))
+        star1_plot.set_offsets(np.column_stack([0, 0]))
+
+        # Update the time step text
+        time_text.set_text(f"Time Step: {i} / {N_timesteps - 1}")
+        
+        # Return the elements that have changed
+        return star1_plot, star2_plot, disk_plot, time_text
+
+    # --- 4. Create and Save Animation ---
+    
+    # Note: interval is the delay between frames in milliseconds.
+    # The frames argument is the number of steps to animate (all steps here).
+    anim = animation.FuncAnimation(
+        fig, 
+        update_frame, 
+        frames=N_timesteps, 
+        interval=50, # 50 ms per frame = 20 frames per second (fps)
+        blit=True     # Optimized drawing
+    )
+    output_filename = f"DiskAnimation{filename_pos[13:-4]}.mp4"
+    print(f"Saving animation to {output_filename}...")
+    
+    # Use 'ffmpeg' writer for MP4. You might need to install it on your system.
+    # Use 'imagemagick' writer for GIF (slower).
+    
+    anim.save(output_filename, writer='ffmpeg', fps=20) 
+
+    print("Animation saved!")
+    plt.close(fig) # Close the figure to free up memory
+    
+    return anim # Optionally return the animation object
 
 
 def run_sim():
     filename = "interactions.csv"
-    main_character_star_idx = 11
-    POSITIONS_LIST, VELOCITIES_LIST = simulate_hydro_disk(filename, main_character_star_idx)
-    np.save("DiskDataPosAU.npy", POSITIONS_LIST)
-    np.save("DiskDataVelKMS.npy", VELOCITIES_LIST)
+    main_character_star_idx = 18
+    POSITIONS_LIST, VELOCITIES_LIST, info_array = simulate_hydro_disk(filename, main_character_star_idx)
+    filename_pos = f"DiskDataPosAU_{info_array[0]}Myr_{info_array[1]}_{info_array[2]}_{info_array[3]}yr_{info_array[4]}MSun_{info_array[5]}MSun.npy"
+    filename_vel = f"DiskDataVelKMS_{info_array[0]}Myr_{info_array[1]}_{info_array[2]}_{info_array[3]}yr_{info_array[4]}MSun_{info_array[5]}MSun.npy"
+    np.save(filename_pos, POSITIONS_LIST)
+    np.save(filename_vel, VELOCITIES_LIST)
+    return filename_pos, filename_vel
+
 
 def main():
-    run_sim()
-    load_and_plot_data("DiskDataPosAU.npy", "DiskDataVelKMS.npy")
-
+    filename_pos = "DiskDataPosAU.npy"    #"DiskDataPosAU_7.0 MyrMyr_18_53_1000yr_1.20301815447MSun_3.07138236035MSun.npy"
+    filename_vel = "DiskDataVelKMS.npy"    #"DiskDataVelKMS_7.0 MyrMyr_18_53_1000yr_1.20301815447MSun_3.07138236035MSun.npy"
+    #filename_pos, filename_vel = run_sim()
+    load_and_plot_data(filename_pos, filename_vel)
+    load_and_animate_data(filename_pos, filename_vel)
 if __name__ in ('__main__'):
     main()
     
