@@ -82,6 +82,7 @@ https://github.com/amusecode/amuse/blob/ce21df1cc58297c0e3ab0d7afa3b4ed2fa4cea24
 - https://academic.oup.com/mnras/article/290/3/490/996086?login=true
 - https://www.aanda.org/articles/aa/full_html/2014/05/aa23124-13/aa23124-13.html
 - https://academic.oup.com/mnras/article/536/1/298/7911845?login=true
+- https://www.nature.com/articles/s41550-024-02349-x.pdf
 
 ## Grading
 1 star, "evolution of disk over time"- plot
