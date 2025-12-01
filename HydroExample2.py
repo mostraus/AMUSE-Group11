@@ -18,6 +18,8 @@ import csv
 import pandas as pd
 from pathlib import Path
 
+from functions import get_bound_particles_fraction, append_row_to_csv, write_bound_frac
+
 
 def get_radius_from_mass(mass):
     Ms = 1 | units.MSun
@@ -282,7 +284,7 @@ def simulate_two_hydro_disks(filename, main_character_star_idx, partner_star_idx
     return POSITIONS_LIST, VELOCITIES_LIST, info_array
 
 
-def simulate_hydro_disk(filename, main_character_star_idx, partner_star_idx, give_Disk=None, index=0):
+def simulate_hydro_disk(filename, main_character_star_idx, partner_star_idx, give_Disk=None, index=0, t_sim=500 | units.yr):
     # --- 0. Get values from file ---
     arr = get_first_interaction(filename, main_character_star_idx, partner_star_idx, index)
     S1id, S2id, M1, M2, R1, R2, T, REL_DIST, REL_VEL = get_initial_values(arr)
@@ -312,7 +314,7 @@ def simulate_hydro_disk(filename, main_character_star_idx, partner_star_idx, giv
     stars.add_particle(perturber)
 
     # --- 3. Create the Gas Disk around the primary star ---
-    Ndisk = 4000 # Increased for better visuals
+    Ndisk = 2000 # Increased for better visuals
     Mdisk = 0.01 | units.MSun
     Rmin = 1.0 | units.au
     Rmax = 100.0 | units.au
@@ -359,7 +361,7 @@ def simulate_hydro_disk(filename, main_character_star_idx, partner_star_idx, giv
 
     # --- 7. Evolution Loop ---
     model_time = 0 | units.yr
-    t_end = 500 | units.yr # Simulate for 200 years to see the fly-by
+    t_end = t_sim  # already has units from above
     
     times = np.linspace(0, t_end.value_in(units.yr), int(t_end/dt) + 1)
 
@@ -394,10 +396,12 @@ def simulate_hydro_disk(filename, main_character_star_idx, partner_star_idx, giv
     gravity.stop()
     hydro.stop()
 
+    write_bound_frac(M1, M2, POSITIONS_LIST, VELOCITIES_LIST, REL_DIST, times, Mdisk/M1)
+
     return POSITIONS_LIST, VELOCITIES_LIST, info_array
 
 
-def load_and_plot_data(filename_pos, filename_vel):
+def load_and_plot_data(filename_pos, filename_vel, PlotName="DiskPlot"):
     # 1. Get the directory where THIS script is located
     #script_dir = Path(__file__).parent
 
@@ -442,7 +446,6 @@ def load_and_plot_data(filename_pos, filename_vel):
         ax[a,b].set_ylabel("y [AU]")
         ax[a,b].set_title(f"{i * plot_every_n_steps}Myr")
 
-
     plt.tight_layout()
     cbar = fig.colorbar(sc, ax=ax.ravel().tolist(), shrink=0.95)
     cbar.set_label('Velocity Magnitude [km/s]')
@@ -450,9 +453,9 @@ def load_and_plot_data(filename_pos, filename_vel):
     try:
         fig.suptitle(f"Interaction between Stars {s[2]} and {s[3]} at Cluster Time: {s[1]}")
     except IndexError:
-        fig.suptitle("Ugh, no title :(")
-    fig.savefig(f"PLOT/DiskPlot{filename_pos[18:-4]}.png")
-    plt.show()
+        fig.suptitle("Ugh, no title")
+    fig.savefig(f"PLOT/{PlotName}{filename_pos[18:-4]}.png")
+    #plt.show()
 
 
 def load_and_animate_data(filename_pos, filename_vel):
@@ -578,7 +581,7 @@ def save_disk(disk, filename):
     :param disk: the disk to be saved
     :param filename: where to save the disk
     '''
-    write_set_to_file(disk, filename, "amuse")
+    write_set_to_file(disk, filename, "amuse", overwrite_file=True)
 
 
 def load_disk(filename):
@@ -591,7 +594,8 @@ def run_sim():
     filename = "interactions.csv"
     main_character_star_idx = 10
     partner_star_idx = 38
-    POSITIONS_LIST, VELOCITIES_LIST, info_array = simulate_two_hydro_disks(filename, main_character_star_idx, partner_star_idx)
+    index = 2
+    POSITIONS_LIST, VELOCITIES_LIST, info_array = simulate_hydro_disk(filename, main_character_star_idx, partner_star_idx, index=index)
     filename_pos = f"Data/DiskDataPosAU_{info_array[0]}Myr_{info_array[1]}_{info_array[2]}_{info_array[3]}yr_{info_array[4]}MSun_{info_array[5]}MSun.npy"
     filename_vel = f"Data/DiskDataVelKMS_{info_array[0]}Myr_{info_array[1]}_{info_array[2]}_{info_array[3]}yr_{info_array[4]}MSun_{info_array[5]}MSun.npy"
     np.save(filename_pos, POSITIONS_LIST)
@@ -633,5 +637,6 @@ def main():
 if __name__ in ('__main__'):
     main()
     #run_sim_multiple_encounters()
+
     
     
