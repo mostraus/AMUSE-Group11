@@ -3,6 +3,7 @@ from amuse.lab import units, constants
 import numpy as np
 import csv
 import os
+import matplotlib.pyplot as plt
 
 def get_bound_particles_fraction(star_mass, disk_positions, disk_velocities):
     """
@@ -69,3 +70,22 @@ def write_bound_frac(M1, M2, pos_list, vel_list, ini_distance, times, disk_frac)
     while len(data_row) < len(header_row):
         data_row.append(-1.0)
     append_row_to_csv("bound_fraction.csv", data_row, header_row)
+
+
+def calculate_energy(all_particles):
+    kinetic = all_particles.kinetic_energy()
+    potential = all_particles.potential_energy()
+    return (kinetic + potential).value_in(units.J)
+
+
+def plot_energy_evolution(times, energies, filename="EnergyEvolution.png"):
+    fig, ax = plt.subplots(figsize=(12,8))
+
+    ax.scatter(times, energies)
+    ax.hlines(np.mean(energies), xmin=times[0], xmax=times[-1], colors="grey", linestyles="dashed", label="average")
+    ax.set_xlabel("Time [yr]")
+    ax.set_ylabel("Total Energy [J]")
+    ax.legend()
+    ax.set_title("Energy Evolution of the System")
+
+    fig.savefig(filename)

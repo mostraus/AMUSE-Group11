@@ -18,7 +18,7 @@ import csv
 import pandas as pd
 from pathlib import Path
 
-from functions import get_bound_particles_fraction, append_row_to_csv, write_bound_frac
+from functions import get_bound_particles_fraction, write_bound_frac, calculate_energy, plot_energy_evolution
 
 
 def get_radius_from_mass(mass):
@@ -284,28 +284,26 @@ def simulate_two_hydro_disks(filename, main_character_star_idx, partner_star_idx
     return POSITIONS_LIST, VELOCITIES_LIST, info_array
 
 
-def simulate_hydro_disk(filename, main_character_star_idx, partner_star_idx, give_Disk=None, index=0, t_sim=500 | units.yr):
-    # --- 0. Get values from file ---
+def simulate_hydro_disk(filename, main_character_star_idx, partner_star_idx, give_Disk=None, index=0,
+                         t_sim=500 | units.yr, dt=1 | units.yr,
+                         N_disk=2000, M_disk=0.01 | units.MSun, R_min=1.0 | units.au, R_max=100.0 | units.au, q_out=-1.5):
+    # --- Get values from file ---
     arr = get_first_interaction(filename, main_character_star_idx, partner_star_idx, index)
     S1id, S2id, M1, M2, R1, R2, T, REL_DIST, REL_VEL = get_initial_values(arr)
-    # --- 1. Create the Star ---
-    #Mstar = 1.0 | units.MSun
-    print(REL_DIST, REL_VEL)
+    # --- Create the Star ---
     star = Particles(1)
     star.mass = M1
-    star.radius = R1 #1.0 | units.RSun
+    star.radius = R1 
     star.position = (0, 0, 0) | units.au    # Rest frame of this star
     star.velocity = (0, 0, 0) | units.kms
     star.name = "STAR"
 
-    # --- 2. Create the Perturbing Star ---
-    # Placed 200 AU away with an impact parameter of 50 AU
-    # Velocity of 10 km/s (~2.1 AU/yr) means encounter happens ~100 yr
+    # --- Create the Perturbing Star ---
     perturber = Particles(1)
-    perturber.mass = M2 #0.5 | units.MSun
-    perturber.radius = R2 #0.5 | units.RSun
-    perturber.position = REL_DIST #(-200.0, 100.0, 0.0) | units.au
-    perturber.velocity = REL_VEL #(5.0, 0.0, 0.0) | units.kms
+    perturber.mass = M2 
+    perturber.radius = R2 
+    perturber.position = REL_DIST   # Rest frame of other star
+    perturber.velocity = REL_VEL 
     perturber.name = "PERTURBER"
 
     # Particle set for all massive N-body objects
@@ -313,31 +311,26 @@ def simulate_hydro_disk(filename, main_character_star_idx, partner_star_idx, giv
     stars.add_particle(star)
     stars.add_particle(perturber)
 
-    # --- 3. Create the Gas Disk around the primary star ---
-    Ndisk = 2000 # Increased for better visuals
-    Mdisk = 0.01 | units.MSun
-    Rmin = 1.0 | units.au
-    Rmax = 100.0 | units.au
-
     # Converter for the hydro code (scaled to disk properties)
-    hydro_converter = nbody_system.nbody_to_si(M1, Rmax)
+    hydro_converter = nbody_system.nbody_to_si(M1, R_max)
     
+    # --- Set up Disk ---
     if give_Disk:
         disk = give_Disk
 
     else:
-        disk = ProtoPlanetaryDisk(Ndisk, 
+        disk = ProtoPlanetaryDisk(N_disk, 
                                 convert_nbody=hydro_converter, 
-                                Rmin=Rmin/Rmax, 
-                                radius_min= Rmin/Rmax,
+                                Rmin=R_min/R_max, 
+                                radius_min= R_min/R_max,
                                 Rmax=1, 
                                 radius_max= 1,
-                                q_out=-1.5, # More typical surface density profile
-                                discfraction=Mdisk/M1).result
+                                q_out=q_out, 
+                                discfraction=M_disk/M1).result
         
         # The star is at (0,0), so no position/velocity offset is needed for the disk
 
-    # --- 4. Setup Gravity Code (for stars) ---
+    # --- Setup Gravity Code (for stars) ---
     # Converter for the N-body code (scaled to the stellar system)
     gravity_converter = nbody_system.nbody_to_si(stars.mass.sum(), 400.0 | units.au)
     
@@ -345,30 +338,33 @@ def simulate_hydro_disk(filename, main_character_star_idx, partner_star_idx, giv
     gravity.particles.add_particles(stars)
     ch2_stars = gravity.particles.new_channel_to(stars)
 
-    # --- 5. Setup Hydro Code (for gas disk) ---
+    # --- Setup Hydro Code (for gas disk) ---
     hydro = Fi(hydro_converter, mode="openmp")
     hydro.parameters.timestep = 0.05 | units.yr # Adjusted for disk timescale
     hydro.particles.add_particles(disk)
     ch2_disk = hydro.particles.new_channel_to(disk)
 
-    # --- 6. Setup Bridge ---
+    # --- Setup Bridge ---
     gravhydro = bridge.Bridge(use_threading=False) # use_threading=False is often more stable
     gravhydro.add_system(gravity, (hydro,)) # Gravity (stars) acts on Hydro (disk)
     gravhydro.add_system(hydro, (gravity,)) # Hydro (disk) acts on Gravity (stars)
     
-    dt = 1 | units.yr
     gravhydro.timestep = 0.1*dt # Bridge timestep
 
-    # --- 7. Evolution Loop ---
+    # --- Simulation Setup ---
     model_time = 0 | units.yr
     t_end = t_sim  # already has units from above
     
     times = np.linspace(0, t_end.value_in(units.yr), int(t_end/dt) + 1)
 
-    POSITIONS_LIST = np.zeros((Ndisk + 2, times.shape[0], 3))
-    VELOCITIES_LIST = np.zeros((Ndisk + 2, times.shape[0], 3))
+    POSITIONS_LIST = np.zeros((N_disk + 2, times.shape[0], 3))
+    VELOCITIES_LIST = np.zeros((N_disk + 2, times.shape[0], 3))
 
+    # --- For the energy calculation ---
+    all_particles = ParticlesSuperset([stars, disk])    # superset updates with its contents
+    ENERGIES_J = np.zeros_like(times)
 
+    # --- Simulation run ---
     for i,t in enumerate(times):
         model_time = t | units.yr
         gravhydro.evolve_model(model_time)
@@ -376,13 +372,15 @@ def simulate_hydro_disk(filename, main_character_star_idx, partner_star_idx, giv
         # Copy data back to particle sets
         ch2_disk.copy()
         ch2_stars.copy()
+
+        ENERGIES_J[i] = calculate_energy(all_particles)
         
         print(f"t={model_time.in_(units.yr)}")
         POSITIONS_LIST[0][i][:] = np.array([stars[0].x.value_in(units.AU), stars[0].y.value_in(units.AU), stars[0].z.value_in(units.AU)])
         POSITIONS_LIST[1][i][:] = np.array([stars[1].x.value_in(units.AU), stars[1].y.value_in(units.AU), stars[1].z.value_in(units.AU)])
         VELOCITIES_LIST[0][i][:] = np.array([stars[0].vx.value_in(units.kms), stars[0].vy.value_in(units.kms), stars[0].vz.value_in(units.kms)])
         VELOCITIES_LIST[1][i][:] = np.array([stars[1].vx.value_in(units.kms), stars[1].vy.value_in(units.kms), stars[1].vz.value_in(units.kms)])
-        for j in range(Ndisk):
+        for j in range(N_disk):
             p = disk[j]
             POSITIONS_LIST[j+2][i][:] = np.array([p.x.value_in(units.AU), p.y.value_in(units.AU), p.z.value_in(units.AU)])
             VELOCITIES_LIST[j+2][i][:] = np.array([p.vx.value_in(units.kms), p.vy.value_in(units.kms), p.vz.value_in(units.kms)])
@@ -390,13 +388,17 @@ def simulate_hydro_disk(filename, main_character_star_idx, partner_star_idx, giv
 
     info_array = np.array([T.value_in(units.Myr), S1id, S2id, t_end.value_in(units.yr), M1.value_in(units.MSun), M2.value_in(units.MSun)])    
     # Time of cluster [Myr], Star 1 [id], Star 2 [id], duration of disk [yr], Mass 1 [MSun], Mass 2 [MSun]
+    # --- Save the disk for further runs with the same disk ---
     ch2_disk.copy()
-    save_disk(disk, f"DISK/DiskSave_{info_array[0]}Myr_{info_array[1]}_{info_array[2]}_{info_array[3]}yr_{info_array[4]}MSun_{info_array[5]}MSun.amuse")
-    # --- 8. Cleanup ---
+    save_str = f"{info_array[0]}Myr_{info_array[1]}_{info_array[2]}_{info_array[3]}yr_{info_array[4]}MSun_{info_array[5]}MSun"
+    save_disk(disk, f"DISK/DiskSave_{save_str}.amuse")
+    # --- Cleanup ---
     gravity.stop()
     hydro.stop()
 
-    write_bound_frac(M1, M2, POSITIONS_LIST, VELOCITIES_LIST, REL_DIST, times, Mdisk/M1)
+    # --- Meta info extraction ---
+    plot_energy_evolution(times, ENERGIES_J, f"PLOT/EnergyEvol_{save_str}.png")
+    write_bound_frac(M1, M2, POSITIONS_LIST, VELOCITIES_LIST, REL_DIST, times, M_disk/M1)
 
     return POSITIONS_LIST, VELOCITIES_LIST, info_array
 
@@ -594,7 +596,7 @@ def run_sim():
     filename = "interactions.csv"
     main_character_star_idx = 10
     partner_star_idx = 38
-    index = 2
+    index = 0
     POSITIONS_LIST, VELOCITIES_LIST, info_array = simulate_hydro_disk(filename, main_character_star_idx, partner_star_idx, index=index)
     filename_pos = f"Data/DiskDataPosAU_{info_array[0]}Myr_{info_array[1]}_{info_array[2]}_{info_array[3]}yr_{info_array[4]}MSun_{info_array[5]}MSun.npy"
     filename_vel = f"Data/DiskDataVelKMS_{info_array[0]}Myr_{info_array[1]}_{info_array[2]}_{info_array[3]}yr_{info_array[4]}MSun_{info_array[5]}MSun.npy"
@@ -635,8 +637,13 @@ def main():
 
 
 if __name__ in ('__main__'):
-    main()
+    #main()
     #run_sim_multiple_encounters()
+    #fv = "Data/DiskDataVelKMS_49.0Myr_0.0_51.0_500.0yr_3.65470978871MSun_1.98590348853MSun.npy"
+    #fp = "Data/DiskDataPosAU_49.0Myr_0.0_51.0_500.0yr_3.65470978871MSun_1.98590348853MSun.npy"
+    #load_and_animate_data(fp, fv)
+    run_sim()
+
 
     
     
