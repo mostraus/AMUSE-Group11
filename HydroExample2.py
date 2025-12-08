@@ -403,6 +403,141 @@ def simulate_hydro_disk(filename, main_character_star_idx, partner_star_idx, giv
     return POSITIONS_LIST, VELOCITIES_LIST, info_array
 
 
+def test_given_disk(give_Disk=None, M1=1|units.MSun, M2=1|units.MSun, T=0|units.Myr, REL_DIST=[-200,100,0]|units.AU, REL_VEL=[5,0,0]|units.kms, pos1=[0,0,0]|units.AU,
+                    t_sim=500 | units.yr, dt=1 | units.yr):
+
+    S1id = -1
+    S2id = -1
+    R1 = get_radius_from_mass(M1)
+    R2 = get_radius_from_mass(M2)
+
+    # --- Create the Star ---
+    star = Particles(1)
+    star.mass = M1
+    star.radius = R1 
+    star.position = (0, 0, 0) | units.au    # Rest frame of this star
+    star.velocity = (0, 0, 0) | units.kms
+    star.name = "STAR"
+
+    # --- Create the Perturbing Star ---
+    perturber = Particles(1)
+    perturber.mass = M2 
+    perturber.radius = R2 
+    perturber.position = REL_DIST   # Rest frame of other star
+    perturber.velocity = REL_VEL 
+    perturber.name = "PERTURBER"
+
+    # Particle set for all massive N-body objects
+    stars = Particles()
+    stars.add_particle(star)
+    stars.add_particle(perturber)
+
+    # Converter for the hydro code (scaled to disk properties)
+    R_max = 100 | units.AU
+    R_min = 1 | units.AU
+    N_disk = 2000
+    q_out = -1.5
+    M_disk = 0.01 | units.MSun
+    hydro_converter = nbody_system.nbody_to_si(M1, R_max)
+
+    # --- Set up Disk ---
+    if give_Disk:
+        disk = give_Disk
+
+    else:
+        disk = ProtoPlanetaryDisk(N_disk, 
+                                convert_nbody=hydro_converter, 
+                                Rmin=R_min/R_max, 
+                                radius_min= R_min/R_max,
+                                Rmax=1, 
+                                radius_max= 1,
+                                q_out=q_out, 
+                                discfraction=M_disk/M1).result
+
+
+    print("Star:",star.position)
+    print("Perturber:",perturber.position)
+    print("Disk COM:",disk.center_of_mass().in_(units.AU))
+
+    disk.position -= pos1
+    perturber.position -= pos1
+
+    print("After Correction:")
+    print("Perturber:",perturber.position)
+    print("Disk COM:",disk.center_of_mass().in_(units.AU))
+    # --- Setup Gravity Code (for stars) ---
+    # Converter for the N-body code (scaled to the stellar system)
+    gravity_converter = nbody_system.nbody_to_si(stars.mass.sum(), 400.0 | units.au)
+    
+    gravity = Hermite(gravity_converter) #, channel_type="sockets")
+    gravity.particles.add_particles(stars)
+    ch2_stars = gravity.particles.new_channel_to(stars)
+
+    # --- Setup Hydro Code (for gas disk) ---
+    hydro = Fi(hydro_converter, mode="openmp")
+    hydro.parameters.timestep = 0.05 | units.yr # Adjusted for disk timescale
+    hydro.particles.add_particles(disk)
+    ch2_disk = hydro.particles.new_channel_to(disk)
+
+    # --- Setup Bridge ---
+    gravhydro = bridge.Bridge(use_threading=False) # use_threading=False is often more stable
+    gravhydro.add_system(gravity, (hydro,)) # Gravity (stars) acts on Hydro (disk)
+    gravhydro.add_system(hydro, (gravity,)) # Hydro (disk) acts on Gravity (stars)
+    
+    gravhydro.timestep = 0.1*dt # Bridge timestep
+
+    # --- Simulation Setup ---
+    model_time = 0 | units.yr
+    t_end = t_sim  # already has units from above
+    
+    times = np.linspace(0, t_end.value_in(units.yr), int(t_end/dt) + 1)
+    POSITIONS_LIST = np.zeros((N_disk + 2, times.shape[0], 3))
+    VELOCITIES_LIST = np.zeros((N_disk + 2, times.shape[0], 3))
+
+    # --- For the energy calculation ---
+    all_particles = ParticlesSuperset([stars, disk])    # superset updates with its contents
+    ENERGIES_J = np.zeros_like(times)
+
+    # --- Simulation run ---
+    for i,t in enumerate(times):
+        model_time = t | units.yr
+        gravhydro.evolve_model(model_time)
+
+        # Copy data back to particle sets
+        ch2_disk.copy()
+        ch2_stars.copy()
+
+        ENERGIES_J[i] = calculate_energy(all_particles)
+        
+        print(f"t={model_time.in_(units.yr)}")
+        POSITIONS_LIST[0][i][:] = np.array([stars[0].x.value_in(units.AU), stars[0].y.value_in(units.AU), stars[0].z.value_in(units.AU)])
+        POSITIONS_LIST[1][i][:] = np.array([stars[1].x.value_in(units.AU), stars[1].y.value_in(units.AU), stars[1].z.value_in(units.AU)])
+        VELOCITIES_LIST[0][i][:] = np.array([stars[0].vx.value_in(units.kms), stars[0].vy.value_in(units.kms), stars[0].vz.value_in(units.kms)])
+        VELOCITIES_LIST[1][i][:] = np.array([stars[1].vx.value_in(units.kms), stars[1].vy.value_in(units.kms), stars[1].vz.value_in(units.kms)])
+        for j in range(N_disk):
+            p = disk[j]
+            POSITIONS_LIST[j+2][i][:] = np.array([p.x.value_in(units.AU), p.y.value_in(units.AU), p.z.value_in(units.AU)])
+            VELOCITIES_LIST[j+2][i][:] = np.array([p.vx.value_in(units.kms), p.vy.value_in(units.kms), p.vz.value_in(units.kms)])
+
+
+    info_array = np.array([T.value_in(units.Myr), S1id, S2id, t_end.value_in(units.yr), M1.value_in(units.MSun), M2.value_in(units.MSun)])    
+    # Time of cluster [Myr], Star 1 [id], Star 2 [id], duration of disk [yr], Mass 1 [MSun], Mass 2 [MSun]
+    # --- Save the disk for further runs with the same disk ---
+    ch2_disk.copy()
+    save_str = f"{info_array[0]}Myr_{info_array[1]}_{info_array[2]}_{info_array[3]}yr_{info_array[4]}MSun_{info_array[5]}MSun"
+    disk_filename = f"DISK/DiskTest_{save_str}__{POSITIONS_LIST[0][-1][0]}__{POSITIONS_LIST[0][-1][1]}__{POSITIONS_LIST[0][-1][2]}.amuse"
+    save_disk(disk, disk_filename)
+    # --- Cleanup ---
+    gravity.stop()
+    hydro.stop()
+
+    # --- Meta info extraction ---
+    plot_energy_evolution(times, ENERGIES_J, f"PLOT/EnergyEvol_{save_str}.png")
+    write_bound_frac(M1, M2, POSITIONS_LIST, VELOCITIES_LIST, REL_DIST, times, M_disk/M1)
+
+    return POSITIONS_LIST, VELOCITIES_LIST, info_array, disk_filename 
+
+
 def load_and_plot_data(filename_pos, filename_vel, PlotName="DiskPlot"):
     # 1. Get the directory where THIS script is located
     #script_dir = Path(__file__).parent
@@ -467,7 +602,7 @@ def load_and_animate_data(filename_pos, filename_vel):
 
     Args:
         filename_pos (str): Path to the NumPy file containing position data.
-        filename_vel (str): Path to the NumPy file containing velocity data (unused in this function).
+        filename_vel (str): Path to the NumPy file containing velocity data.
     """
     
     # --- 1. Load Data ---
@@ -495,7 +630,7 @@ def load_and_animate_data(filename_pos, filename_vel):
     ax.set_ylim(-lim, lim)
     ax.set_xlabel("x [AU]")
     ax.set_ylabel("y [AU]")
-    s = filename_pos.split("_")     # s[0] = StartString, s[1] = cluster time, s[2] = star 1, s[3] = star 2
+    s = filename_pos.split("_")     # s[0] = StartString, s[1] = cluster time, s[2] = star 1, s[3] = star 2, s[5] = M1
     ax.set_title(f"Interaction between Stars {s[2]} and {s[3]} at Cluster Time: {s[1]}")
     
     # Initialize the plot elements
@@ -514,6 +649,7 @@ def load_and_animate_data(filename_pos, filename_vel):
     
     # Text element for time step
     time_text = ax.text(0.05, 0.95, '', transform=ax.transAxes, fontsize=12, verticalalignment='top')
+    bound_frac_text = ax.text(0.05, 0.95, '', transform=ax.transAxes, fontsize=12, verticalalignment='bottom')
 
 
     # --- 3. Animation Update Function ---
@@ -544,9 +680,10 @@ def load_and_animate_data(filename_pos, filename_vel):
         # Update colors
         current_speeds = disk_speeds_all[:, i]
         disk_plot.set_array(current_speeds)
-
         # Update the time step text
         time_text.set_text(f"Time Step: {i} / {N_timesteps - 1}")
+        bf = get_bound_particles_fraction(float(s[5][:-4]) | units.MSun, disk_positions[:,i,:], disk_velocities[:,i,:])
+        bound_frac_text.set_text(f"Bound Fraction: {bf:.3f}")
         
         # Return the elements that have changed
         return star1_plot, star2_plot, disk_plot, time_text
@@ -591,6 +728,17 @@ def load_disk(filename):
     return disk
 
 
+def plot_disk(disk, save_name):
+    disk.move_to_center()
+    fig, ax = plt.subplots()
+    ax.scatter(disk.x.value_in(units.AU), disk.y.value_in(units.AU), s=1, c="black")
+    ax.scatter(0,0, s=10, c="red")
+    ax.set_xlabel("x [AU]")
+    ax.set_ylabel("y [AU]")
+    ax.set_xlim(-350, 350)
+    ax.set_ylim(-350, 350)
+    fig.savefig(save_name)
+
 
 def run_sim():
     filename = "interactions.csv"
@@ -628,6 +776,45 @@ def run_sim_multiple_encounters():
     load_and_animate_data(filename_pos, filename_vel)
 
 
+def disentangle_disk_filename(disk_filename):
+    df = disk_filename.split("__")
+    pos_1 = [float(df[-3].split(".")[0]), float(df[-2]), float(df[-1])] | units.AU
+    df1 = df[0].split("_")
+    directory, savename = df1[0].split("/")
+    T, S1idx, S2idx, length, M1, M2 = df1[1:]
+    T = float(T[:-3]) | units.Myr
+    S1idx = float(S1idx)
+    S2idx = float(S2idx)
+    length = float(length[:-2]) | units.yr
+    M1 = float(M1[:-4]) | units.MSun
+    M2 = float(M2[:-4]) | units.MSun
+
+    return pos_1, directory, savename, T, length, S1idx, S2idx, M1, M2
+
+
+def run_test_disk():
+    POSITIONS_LIST, VELOCITIES_LIST, info_array, disk_filename = test_given_disk()
+    i=1
+    filename_pos1 = f"Data/DiskTest{i}PosAU_{info_array[0]}Myr_{info_array[1]}_{info_array[2]}_{info_array[3]}yr_{info_array[4]}MSun_{info_array[5]}MSun.npy"
+    filename_vel1 = f"Data/DiskTest{i}VelKMS_{info_array[0]}Myr_{info_array[1]}_{info_array[2]}_{info_array[3]}yr_{info_array[4]}MSun_{info_array[5]}MSun.npy"
+    np.save(filename_pos1, POSITIONS_LIST)
+    np.save(filename_vel1, VELOCITIES_LIST)
+    disk = load_disk(disk_filename)
+    df = disk_filename.split("/")[1]
+    df = df.split(".")[0]
+    plot_disk(disk, f"PLOT/{df}.png")
+    pos1 = POSITIONS_LIST[0][-1][:] | units.AU
+    POSITIONS_LIST, VELOCITIES_LIST, info_array, disk_filename = test_given_disk(give_Disk=disk, pos1=pos1)
+    i=2
+    filename_pos2 = f"Data/DiskTest{i}PosAU_{info_array[0]}Myr_{info_array[1]}_{info_array[2]}_{info_array[3]}yr_{info_array[4]}MSun_{info_array[5]}MSun.npy"
+    filename_vel2 = f"Data/DiskTest{i}VelKMS_{info_array[0]}Myr_{info_array[1]}_{info_array[2]}_{info_array[3]}yr_{info_array[4]}MSun_{info_array[5]}MSun.npy"
+    np.save(filename_pos2, POSITIONS_LIST)
+    np.save(filename_vel2, VELOCITIES_LIST)
+
+    load_and_plot_data(filename_pos1, filename_vel1, "DiskTest1")
+    load_and_plot_data(filename_pos2, filename_vel2, "DiskTest2")
+
+
 def main():
     #filename_pos = "Data/DiskDataPosAU_43.0 MyrMyr_29_61_1000yr_10.0792049182MSun_7.75182634499MSun.npy" #"Data/DiskDataPosAU.npy"    #"DiskDataPosAU_7.0 MyrMyr_18_53_1000yr_1.20301815447MSun_3.07138236035MSun.npy"
     #filename_vel = "Data/DiskDataVelKMS_43.0 MyrMyr_29_61_1000yr_10.0792049182MSun_7.75182634499MSun.npy" #"Data/DiskDataVelKMS.npy"    #"DiskDataVelKMS_7.0 MyrMyr_18_53_1000yr_1.20301815447MSun_3.07138236035MSun.npy"
@@ -639,10 +826,15 @@ def main():
 if __name__ in ('__main__'):
     #main()
     #run_sim_multiple_encounters()
-    #fv = "Data/DiskDataVelKMS_49.0Myr_0.0_51.0_500.0yr_3.65470978871MSun_1.98590348853MSun.npy"
-    #fp = "Data/DiskDataPosAU_49.0Myr_0.0_51.0_500.0yr_3.65470978871MSun_1.98590348853MSun.npy"
+    #fp = "Data/DiskTest2PosAU_0Myr_-1_-1_500yr_1MSun_1MSun.npy"
+    #fv = "Data/DiskTest2VelKMS_0Myr_-1_-1_500yr_1MSun_1MSun.npy"
     #load_and_animate_data(fp, fv)
-    run_sim()
+    #run_sim()
+    run_test_disk()
+    #disk = load_disk("DISK/DiskTest_0Myr_-1_-1_500yr_1MSun_1MSun.amuse")
+    #print(disk.center_of_mass().value_in(units.AU))
+    #disk.move_to_center()
+    #print(disk.center_of_mass().value_in(units.AU))
 
 
     
