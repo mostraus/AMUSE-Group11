@@ -2,31 +2,8 @@ import pandas as pd
 import numpy as np
 from amuse.lab import *
 from amuse.ext.protodisk import ProtoPlanetaryDisk
-from HydroExample2 import simulate_hydro_disk, load_and_plot_data, load_and_animate_data, get_initial_values_new, simulate_disk_new
-
-# TODO: make sure saving the data and plots works correctly
-# TODO: naming the stars nicer in plots and data
-# TODO: check why the disk implodes
-# TODO: clean up functions
-
-
-def marker_sizes(rel_z_distances, max_size=150, min_size=10):
-    abs_z = np.abs(rel_z_distances)
-
-    # 3. Define your desired size range for markers
-    max_size = 250  # Size for objects at z=0 (closest)
-    min_size = 20   # Size for objects furthest away
-
-    # 4. Normalize Z to range [0, 1]
-    # Avoid division by zero if everything is on the plane
-    max_z_val = np.max(abs_z)
-    if max_z_val == 0:
-        max_z_val = 1.0
-    normalized_z = abs_z / max_z_val
-
-    # 5. Inverse mapping: 0 (close) -> max_size, 1 (far) -> min_size
-    marker_sizes = max_size - normalized_z * (max_size - min_size)
-    return marker_sizes
+from HydroExample2 import simulate_hydro_disk, load_and_plot_data, load_and_animate_data, get_initial_values_new, simulate_disk_new, simulate_2disk_new
+from functions import get_bound_particles_fraction, bound_fraction_plot
 
 
 def run_all_cluster_sims(interactions_file):
@@ -36,7 +13,6 @@ def run_all_cluster_sims(interactions_file):
 
     # values to create the initial disks
     N_disk = 2000
-    N_disk=2000
     M_disk=0.01 | units.MSun
     R_min=1.0 | units.au
     R_max=100.0 | units.au
@@ -44,23 +20,29 @@ def run_all_cluster_sims(interactions_file):
 
     t_sim = 1000 | units.yr
 
+    # memory to skip when the same interaction was logged multiple times
     last_interaction_time = 0 | units.yr
     last_star1_id = None
     last_star2_id = None
 
+    # lists for the distance vs particles lost plot
+    enc_dists = []
+    frac_lost = []
+
     for idx, mc_star in enumerate(stars_with_interactions):
-        if idx == 4:
-            break
+        #if idx == 4:
+        #    break
         mask = (df["particle1_id"] == mc_star)
         interactions = df[mask]
         temp_star = None
         temp_disk = None
         for i in range(len(interactions)):
-            print(f"Current Index i: {i}")
-            print(f"Total rows in interactions: {len(interactions)}")
+            #print(f"Current Index i: {i}")
+            #print(f"Total rows in interactions: {len(interactions)}")
             S1id, S2id, M1, M2, R1, R2, T, REL_DIST, REL_VEL = get_initial_values_new(interactions.iloc[i])
             print(f"Interaction between stars {idx} and {i} (IDs: {S1id}; {S2id})")
             if (last_star1_id == S1id) and (last_star2_id == S2id) and (T - last_interaction_time < 1|units.Myr):
+                print(f"skip interaction {i} between {S1id} and {S2id} because only {T - last_interaction_time} have passed")
                 continue
             if i == 0:
                 star = Particles(1)
@@ -104,6 +86,79 @@ def run_all_cluster_sims(interactions_file):
             np.save(filename_vel, vel_list)
             load_and_plot_data(filename_pos, filename_vel, PlotName=f"DEBUG_{idx}_{i}")
 
+            # find closest approach and fraction of particles lost during this encounter
+            min_dist = np.min(np.absolute(np.linalg.norm(pos_list[1], axis=1) - np.linalg.norm(pos_list[0], axis=1)))
+            enc_dists.append(min_dist)
+            bound_frac_end = get_bound_particles_fraction(M1, pos_list[0,-1,:], vel_list[0,-1,:], pos_list[2:,-1,:], vel_list[2:,-1,:])
+            bound_frac_start = get_bound_particles_fraction(M1, pos_list[0,-1,:], vel_list[0,-1,:], pos_list[2:,0,:], vel_list[2:,0,:])
+            frac_lost.append(bound_frac_end / bound_frac_start)
+
+    bound_fraction_plot(enc_dists, frac_lost, PlotName=f"DistVSLost__{save_name}")
+
+
+def run_sim_2disk(interactions_file, s1id, s2id, index=0, t_sim=500|units.yr):
+    df = pd.read_csv(interactions_file)
+    mask = ((df["particle1_id"] == s1id) & (df["particle2_id"] == s2id))
+    df_filtered = df[mask]
+    arr = df_filtered.iloc[index]
+    S1id, S2id, M1, M2, R1, R2, T, REL_DIST, REL_VEL = get_initial_values_new(arr)
+
+    # create Stars and Disks
+    star1 = Particles(1)
+    star1.mass = M1
+    star1.radius = R1 
+    star1.position = (0, 0, 0) | units.au    # Rest frame of this star
+    star1.velocity = (0, 0, 0) | units.kms
+    star1.name = "STAR"
+
+    star2 = Particles(1)
+    star2.mass = M2 
+    star2.radius = R2 
+    star2.position = REL_DIST   # Rest frame of other star
+    star2.velocity = REL_VEL 
+    star2.name = "PERTURBER"
+
+    # define disk values
+    N_disk = 2000
+    M_disk=0.01 | units.MSun
+    R_min=1.0 | units.au
+    R_max=100.0 | units.au
+    q_out=-1.5
+
+    hydro_converter1 = nbody_system.nbody_to_si(M1, R_max)
+    hydro_converter2 = nbody_system.nbody_to_si(M2, R_max)
+
+    disk1 = ProtoPlanetaryDisk(N_disk, 
+                    convert_nbody=hydro_converter1, 
+                    Rmin=R_min/R_max, 
+                    radius_min= R_min/R_max,
+                    Rmax=1, 
+                    radius_max= 1,
+                    q_out=q_out, 
+                    discfraction=M_disk/M1).result
+    
+    disk2 = ProtoPlanetaryDisk(N_disk, 
+                    convert_nbody=hydro_converter2, 
+                    Rmin=R_min/R_max, 
+                    radius_min= R_min/R_max,
+                    Rmax=1, 
+                    radius_max= 1,
+                    q_out=q_out, 
+                    discfraction=M_disk/M1).result
+    
+    disk2.position += REL_DIST
+    disk2.velocity += REL_VEL
+
+    # make simulation
+    end_star, end_disk1, end_disk2, pos_list, vel_list = simulate_2disk_new(star1, star2, disk1, disk2, "", t_sim)
+
+    save_name = f"{T.value_in(units.yr)}Myr_{S1id}_{S2id}_{t_sim.value_in(units.yr)}_{M1.value_in(units.MSun):.3f}_{M2.value_in(units.MSun):.3f}"
+    filename_pos = f"DATA/2DiskRunPosAU__{save_name}.npy"
+    filename_vel = f"DATA/2DiskRunVelKMS__{save_name}.npy"
+    np.save(filename_pos, pos_list)
+    np.save(filename_vel, vel_list)
+    load_and_plot_data(filename_pos, filename_vel, PlotName=f"2DiskRun_{S1id}_{S2id}")
+
 
 
 def run_all_sims_1disk(interactions_file):
@@ -142,8 +197,6 @@ def run_all_sims_1disk(interactions_file):
         load_and_plot_data(filename_pos, filename_vel, PlotName=f"FullRun{i}")
 
 
-
-
 def make_info_arr(df, S1_id, S2_id, index=0):
     mask = ((df['star_i'] == S1_id) & (df['star_j'] == S2_id))
     result = df[mask]
@@ -158,15 +211,19 @@ def make_info_arr(df, S1_id, S2_id, index=0):
 
 if __name__ == "__main__":
     #run_all_sims_1disk("interactions.csv")
-    run_all_cluster_sims("Interactions stopping conditions_100Myr.csv")
-    fp1 = "Data//FullRunPosAU__99783.7073997Myr_1_0_500_9.331_2.330.npy"
-    fv1 = "Data//FullRunVelKMS__99783.7073997Myr_1_0_500_9.331_2.330.npy"
-    fp2 = "Data/FullRunPosAU__100266.667263Myr_1_1_500_9.331_2.330.npy"
-    fv2 = "Data/FullRunVelKMS__100266.667263Myr_1_1_500_9.331_2.330.npy"
-    fp3 = "Data/FullRunPosAU__100324.412464Myr_1_2_500_9.331_2.330.npy"
-    fv3 = "Data/FullRunVelKMS__100324.412464Myr_1_2_500_9.331_2.330.npy"
+    #run_all_cluster_sims("Interactions stopping conditions_100Myr.csv")
+    run_sim_2disk("Interactions stopping conditions_100Myr.csv", 113871276108901526, 15793569915568245741, t_sim=100|units.yr)
+    #fp1 = "Data//FullRunPosAU__99783.7073997Myr_1_0_500_9.331_2.330.npy"
+    #fv1 = "Data//FullRunVelKMS__99783.7073997Myr_1_0_500_9.331_2.330.npy"
+    #fp2 = "Data/FullRunPosAU__100266.667263Myr_1_1_500_9.331_2.330.npy"
+    #fv2 = "Data/FullRunVelKMS__100266.667263Myr_1_1_500_9.331_2.330.npy"
+    #fp3 = "Data/FullRunPosAU__100324.412464Myr_1_2_500_9.331_2.330.npy"
+    #fv3 = "Data/FullRunVelKMS__100324.412464Myr_1_2_500_9.331_2.330.npy"
     #load_and_animate_data(fp1, fv1)
     #load_and_animate_data(fp2, fv2)
     #load_and_animate_data(fp3,fv3)
+    #fp = "Data/2DiskRunPosAU__966420.184921Myr_1.1387127610890152e+17_1.5793569915568245e+19_1000_9.331_1.687.npy"
+    #fv = "Data/2DiskRunVelKMS__966420.184921Myr_1.1387127610890152e+17_1.5793569915568245e+19_1000_9.331_1.687.npy"
+    #load_and_animate_data(fp, fv)
 
 

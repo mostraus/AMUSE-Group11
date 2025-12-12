@@ -608,6 +608,106 @@ def test_given_disk(ini_file=None,
     return POSITIONS_LIST, VELOCITIES_LIST, info_array, disk_filename 
 
 
+def simulate_disk_new(STAR, PERTURBER, DISK, disk_savename,
+                      t_sim=500|units.yr, dt=1|units.yr):
+
+    # Converter for the hydro code (scaled to disk properties)
+    hydro_converter = nbody_system.nbody_to_si(STAR.mass[0], 100|units.AU) #np.mean(DISK.position.value_in(units.AU))|units.AU)
+        
+    # Center everything on STAR
+    #STAR.position -= STAR.position
+    PERTURBER.position += STAR.position
+    #DISK.position -= STAR.position
+    #STAR.velocity -= STAR.velocity
+    PERTURBER.velocity += STAR.velocity
+    #DISK.velocity -= STAR.velocity
+
+    # Particle set for all massive N-body objects
+    stars = Particles()
+    stars.add_particle(STAR)
+    stars.add_particle(PERTURBER)
+
+    # --- Setup Gravity Code (for stars) ---
+    # Converter for the N-body code (scaled to the stellar system)
+    gravity_converter = nbody_system.nbody_to_si(stars.mass.sum(), 400|units.AU) #np.linalg.norm(PERTURBER.position))
+    
+    gravity = Hermite(gravity_converter) 
+    gravity.particles.add_particles(stars)
+    ch2_stars = gravity.particles.new_channel_to(stars)
+
+    # --- Setup Hydro Code (for gas disk) ---
+    hydro = Fi(hydro_converter, mode="openmp")
+    hydro.parameters.timestep = 0.05 | units.yr # Adjusted for disk timescale
+    hydro.particles.add_particles(DISK)
+    ch2_disk = hydro.particles.new_channel_to(DISK)
+
+    # --- Setup Bridge ---
+    gravhydro = bridge.Bridge(use_threading=False) # use_threading=False is often more stable
+    gravhydro.add_system(gravity, (hydro,)) # Gravity (stars) acts on Hydro (disk)
+    gravhydro.add_system(hydro, (gravity,)) # Hydro (disk) acts on Gravity (stars)
+    
+    gravhydro.timestep = 0.1*dt # Bridge timestep
+
+    # --- Simulation Setup ---
+    model_time = 0 | units.yr
+    t_end = t_sim  # already has units from above
+    
+    times = np.linspace(0, t_end.value_in(units.yr), int(t_end/dt) + 1)
+
+    N_disk = np.shape(DISK.mass)[0]
+
+    POSITIONS_LIST = np.zeros((N_disk + 2, times.shape[0], 3))
+    VELOCITIES_LIST = np.zeros((N_disk + 2, times.shape[0], 3))
+
+    # --- For the energy calculation ---
+    all_particles = ParticlesSuperset([stars, DISK])    # superset updates with its contents
+    ENERGIES_J = np.zeros_like(times)
+
+    # --- Simulation run ---
+    for i,t in enumerate(times):
+        model_time = t | units.yr
+        try:
+            gravhydro.evolve_model(model_time)
+        except Exception as e:
+            print(f"CRASH at time {model_time}")
+            print(f"Number of gas particles: {np.shape(DISK.position)}")
+            print(f"Number of star particles: {np.shape(stars.position)}")
+            # If you want to see if any particle has huge velocity:
+            print("Max velocity in Disk:", max(np.linalg.norm(DISK.velocity.in_(units.kms), axis=1)))
+            print("Max distance in Disk:", max(np.linalg.norm(DISK.position.in_(units.AU), axis=1)))
+            raise e # Re-raise the error so the script stops
+
+        # Copy data back to particle sets
+        ch2_disk.copy()
+        ch2_stars.copy()
+
+        ENERGIES_J[i] = calculate_energy(all_particles)
+        
+        print(f"t={model_time.in_(units.yr)}")
+        POSITIONS_LIST[0][i][:] = np.array([stars[0].x.value_in(units.AU), stars[0].y.value_in(units.AU), stars[0].z.value_in(units.AU)])
+        POSITIONS_LIST[1][i][:] = np.array([stars[1].x.value_in(units.AU), stars[1].y.value_in(units.AU), stars[1].z.value_in(units.AU)])
+        VELOCITIES_LIST[0][i][:] = np.array([stars[0].vx.value_in(units.kms), stars[0].vy.value_in(units.kms), stars[0].vz.value_in(units.kms)])
+        VELOCITIES_LIST[1][i][:] = np.array([stars[1].vx.value_in(units.kms), stars[1].vy.value_in(units.kms), stars[1].vz.value_in(units.kms)])
+        for j in range(N_disk):
+            p = DISK[j]
+            POSITIONS_LIST[j+2][i][:] = np.array([p.x.value_in(units.AU), p.y.value_in(units.AU), p.z.value_in(units.AU)])
+            VELOCITIES_LIST[j+2][i][:] = np.array([p.vx.value_in(units.kms), p.vy.value_in(units.kms), p.vz.value_in(units.kms)])
+
+    # --- Save the disk for further runs with the same disk ---
+    ch2_disk.copy()
+    ch2_stars.copy()
+    save_disk(all_particles, disk_savename)
+    # --- Cleanup ---
+    gravity.stop()
+    hydro.stop()
+
+    # --- Meta info extraction ---
+    #plot_energy_evolution(times, ENERGIES_J, f"PLOT/EnergyEvol_{save_str}.png")
+    #write_bound_frac(M1, M2, POSITIONS_LIST, VELOCITIES_LIST, REL_DIST, times, M_disk/M1)
+
+    return stars[0], DISK, POSITIONS_LIST, VELOCITIES_LIST
+
+
 def load_and_plot_data(filename_pos, filename_vel, PlotName="DiskPlot"):
     # 1. Get the directory where THIS script is located
     #script_dir = Path(__file__).parent
@@ -702,8 +802,8 @@ def load_and_animate_data(filename_pos, filename_vel):
     ax.set_ylim(-lim, lim)
     ax.set_xlabel("x [AU]")
     ax.set_ylabel("y [AU]")
-    s = filename_pos.split("_")     # s[0] = StartString, s[1] = cluster time, s[2] = star 1, s[3] = star 2, s[5] = M1
-    ax.set_title(f"Interaction between Stars {s[2]} and {s[3]} at Cluster Time: {s[1]}")
+    s = filename_pos.split("_")   
+    ax.set_title(f"Interaction between Masses {s[-2]} and {s[-1][:-4]} at Cluster Time: {s[2]}")
     
     # Initialize the plot elements
     # Star 1 (Red, centered at 0,0 after subtraction)
@@ -755,7 +855,7 @@ def load_and_animate_data(filename_pos, filename_vel):
         current_speeds = disk_speeds_all[:, i]
         disk_plot.set_array(current_speeds)
         # Update the time step text
-        bf = get_bound_particles_fraction(float(s[5]) | units.MSun, star1_positions[i,:], star1_velocities[i,:], disk_positions[:,i,:], disk_velocities[:,i,:])
+        bf = get_bound_particles_fraction(float(s[6]) | units.MSun, star1_positions[i,:], star1_velocities[i,:], disk_positions[:,i,:], disk_velocities[:,i,:])
 
         time_text.set_text(f"Time Step: {i} / {N_timesteps - 1} \nBound Fraction: {bf:.3f}r \nperturber z-dist: {star2_z_rel:.1f}au")
         #bound_frac_text.set_text(f"Bound Fraction: {bf:.3f}")
@@ -927,19 +1027,11 @@ if __name__ in ('__main__'):
     
 
 
-def simulate_disk_new(STAR, PERTURBER, DISK, disk_savename,
+def simulate_2disk_new(STAR, PERTURBER, DISK1, DISK2, disk_savename,
                       t_sim=500|units.yr, dt=1|units.yr):
 
     # Converter for the hydro code (scaled to disk properties)
     hydro_converter = nbody_system.nbody_to_si(STAR.mass[0], 100|units.AU) #np.mean(DISK.position.value_in(units.AU))|units.AU)
-        
-    # Center everything on STAR
-    #STAR.position -= STAR.position
-    PERTURBER.position += STAR.position
-    #DISK.position -= STAR.position
-    #STAR.velocity -= STAR.velocity
-    PERTURBER.velocity += STAR.velocity
-    #DISK.velocity -= STAR.velocity
 
     # Particle set for all massive N-body objects
     stars = Particles()
@@ -957,8 +1049,10 @@ def simulate_disk_new(STAR, PERTURBER, DISK, disk_savename,
     # --- Setup Hydro Code (for gas disk) ---
     hydro = Fi(hydro_converter, mode="openmp")
     hydro.parameters.timestep = 0.05 | units.yr # Adjusted for disk timescale
-    hydro.particles.add_particles(DISK)
-    ch2_disk = hydro.particles.new_channel_to(DISK)
+    hydro.particles.add_particles(DISK1)
+    ch2_disk1 = hydro.particles.new_channel_to(DISK1)
+    hydro.particles.add_particles(DISK2)
+    ch2_disk2 = hydro.particles.new_channel_to(DISK2)
 
     # --- Setup Bridge ---
     gravhydro = bridge.Bridge(use_threading=False) # use_threading=False is often more stable
@@ -973,31 +1067,25 @@ def simulate_disk_new(STAR, PERTURBER, DISK, disk_savename,
     
     times = np.linspace(0, t_end.value_in(units.yr), int(t_end/dt) + 1)
 
-    N_disk = np.shape(DISK.mass)[0]
+    N_disk1 = np.shape(DISK1.mass)[0]
+    N_disk2 = np.shape(DISK2.mass)[0]
 
-    POSITIONS_LIST = np.zeros((N_disk + 2, times.shape[0], 3))
-    VELOCITIES_LIST = np.zeros((N_disk + 2, times.shape[0], 3))
+    POSITIONS_LIST = np.zeros((N_disk1 + N_disk2 + 2, times.shape[0], 3))
+    VELOCITIES_LIST = np.zeros((N_disk1 + N_disk2 + 2, times.shape[0], 3))
 
     # --- For the energy calculation ---
-    all_particles = ParticlesSuperset([stars, DISK])    # superset updates with its contents
+    all_particles = ParticlesSuperset([stars, DISK1, DISK2])    # superset updates with its contents
     ENERGIES_J = np.zeros_like(times)
 
     # --- Simulation run ---
     for i,t in enumerate(times):
         model_time = t | units.yr
-        try:
-            gravhydro.evolve_model(model_time)
-        except Exception as e:
-            print(f"CRASH at time {model_time}")
-            print(f"Number of gas particles: {np.shape(DISK.position)}")
-            print(f"Number of star particles: {np.shape(stars.position)}")
-            # If you want to see if any particle has huge velocity:
-            print("Max velocity in Disk:", max(np.linalg.norm(DISK.velocity.in_(units.kms), axis=1)))
-            print("Max distance in Disk:", max(np.linalg.norm(DISK.position.in_(units.AU), axis=1)))
-            raise e # Re-raise the error so the script stops
+
+        gravhydro.evolve_model(model_time)
 
         # Copy data back to particle sets
-        ch2_disk.copy()
+        ch2_disk1.copy()
+        ch2_disk2.copy()
         ch2_stars.copy()
 
         ENERGIES_J[i] = calculate_energy(all_particles)
@@ -1007,15 +1095,20 @@ def simulate_disk_new(STAR, PERTURBER, DISK, disk_savename,
         POSITIONS_LIST[1][i][:] = np.array([stars[1].x.value_in(units.AU), stars[1].y.value_in(units.AU), stars[1].z.value_in(units.AU)])
         VELOCITIES_LIST[0][i][:] = np.array([stars[0].vx.value_in(units.kms), stars[0].vy.value_in(units.kms), stars[0].vz.value_in(units.kms)])
         VELOCITIES_LIST[1][i][:] = np.array([stars[1].vx.value_in(units.kms), stars[1].vy.value_in(units.kms), stars[1].vz.value_in(units.kms)])
-        for j in range(N_disk):
-            p = DISK[j]
+        for j in range(N_disk1 + N_disk2):
+            if j < N_disk1:
+                p = DISK1[j]
+            else:
+                p = DISK2[j - N_disk1]
+
             POSITIONS_LIST[j+2][i][:] = np.array([p.x.value_in(units.AU), p.y.value_in(units.AU), p.z.value_in(units.AU)])
             VELOCITIES_LIST[j+2][i][:] = np.array([p.vx.value_in(units.kms), p.vy.value_in(units.kms), p.vz.value_in(units.kms)])
 
     # --- Save the disk for further runs with the same disk ---
-    ch2_disk.copy()
+    ch2_disk1.copy()
+    ch2_disk2.copy()
     ch2_stars.copy()
-    save_disk(all_particles, disk_savename)
+    #save_disk(all_particles, disk_savename)
     # --- Cleanup ---
     gravity.stop()
     hydro.stop()
@@ -1024,4 +1117,4 @@ def simulate_disk_new(STAR, PERTURBER, DISK, disk_savename,
     #plot_energy_evolution(times, ENERGIES_J, f"PLOT/EnergyEvol_{save_str}.png")
     #write_bound_frac(M1, M2, POSITIONS_LIST, VELOCITIES_LIST, REL_DIST, times, M_disk/M1)
 
-    return stars[0], DISK, POSITIONS_LIST, VELOCITIES_LIST
+    return stars[0], DISK1, DISK2, POSITIONS_LIST, VELOCITIES_LIST
