@@ -33,7 +33,6 @@ def run_all_cluster_sims(interactions_file):
     df = pd.read_csv(interactions_file)
 
     stars_with_interactions = np.unique(df["particle1_id"])
-    max_rel_z_dist = max(abs(df["particle2_z (kpc)"] - df["particle1_z (kpc)"]))
 
     # values to create the initial disks
     N_disk = 2000
@@ -43,7 +42,11 @@ def run_all_cluster_sims(interactions_file):
     R_max=100.0 | units.au
     q_out=-1.5
 
-    t_sim = 500 | units.yr
+    t_sim = 1000 | units.yr
+
+    last_interaction_time = 0 | units.yr
+    last_star1_id = None
+    last_star2_id = None
 
     for idx, mc_star in enumerate(stars_with_interactions):
         if idx == 4:
@@ -56,8 +59,9 @@ def run_all_cluster_sims(interactions_file):
             print(f"Current Index i: {i}")
             print(f"Total rows in interactions: {len(interactions)}")
             S1id, S2id, M1, M2, R1, R2, T, REL_DIST, REL_VEL = get_initial_values_new(interactions.iloc[i])
-            print(REL_DIST, REL_VEL)
             print(f"Interaction between stars {idx} and {i} (IDs: {S1id}; {S2id})")
+            if (last_star1_id == S1id) and (last_star2_id == S2id) and (T - last_interaction_time < 1|units.Myr):
+                continue
             if i == 0:
                 star = Particles(1)
                 star.mass = M1
@@ -88,13 +92,17 @@ def run_all_cluster_sims(interactions_file):
             perturber.velocity = REL_VEL 
             perturber.name = "PERTURBER"
 
-            save_name = f"_{T.value_in(units.yr)}Myr_{idx}_{i}_{t_sim.value_in(units.yr)}_{M1.value_in(units.MSun):.3f}_{M2.value_in(units.MSun):.3f}"
-            temp_star, temp_disk, pos_list, vel_list = simulate_disk_new(star, perturber, disk, f"DISK/DiskSave_{save_name}.amuse", t_sim=t_sim)
-            filename_pos = f"DATA/FullRunPosAU_{save_name}.npy"
-            filename_vel = f"DATA/FullRunVelKMS_{save_name}.npy"
+            last_interaction_time = T
+            last_star1_id = S1id
+            last_star2_id = S2id
+
+            save_name = f"{T.value_in(units.yr)}Myr_{idx}_{i}_{t_sim.value_in(units.yr)}_{M1.value_in(units.MSun):.3f}_{M2.value_in(units.MSun):.3f}"
+            temp_star, temp_disk, pos_list, vel_list = simulate_disk_new(star, perturber, disk, f"DISK/DiskSave__{save_name}.amuse", t_sim=t_sim)
+            filename_pos = f"DATA/FullRunNewPosAU__{save_name}.npy"
+            filename_vel = f"DATA/FullRunNewVelKMS__{save_name}.npy"
             np.save(filename_pos, pos_list)
             np.save(filename_vel, vel_list)
-            load_and_plot_data(filename_pos, filename_vel, PlotName=f"DEBUG_{idx}_{i}", max_z=max_rel_z_dist)
+            load_and_plot_data(filename_pos, filename_vel, PlotName=f"DEBUG_{idx}_{i}")
 
 
 
@@ -150,15 +158,15 @@ def make_info_arr(df, S1_id, S2_id, index=0):
 
 if __name__ == "__main__":
     #run_all_sims_1disk("interactions.csv")
-    #run_all_cluster_sims("Interactions stopping conditions_100Myr.csv")
+    run_all_cluster_sims("Interactions stopping conditions_100Myr.csv")
     fp1 = "Data//FullRunPosAU__99783.7073997Myr_1_0_500_9.331_2.330.npy"
     fv1 = "Data//FullRunVelKMS__99783.7073997Myr_1_0_500_9.331_2.330.npy"
     fp2 = "Data/FullRunPosAU__100266.667263Myr_1_1_500_9.331_2.330.npy"
     fv2 = "Data/FullRunVelKMS__100266.667263Myr_1_1_500_9.331_2.330.npy"
     fp3 = "Data/FullRunPosAU__100324.412464Myr_1_2_500_9.331_2.330.npy"
     fv3 = "Data/FullRunVelKMS__100324.412464Myr_1_2_500_9.331_2.330.npy"
-    load_and_animate_data(fp1, fv1)
-    load_and_animate_data(fp2, fv2)
-    load_and_animate_data(fp3,fv3)
+    #load_and_animate_data(fp1, fv1)
+    #load_and_animate_data(fp2, fv2)
+    #load_and_animate_data(fp3,fv3)
 
 

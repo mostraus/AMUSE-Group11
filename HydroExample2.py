@@ -608,7 +608,7 @@ def test_given_disk(ini_file=None,
     return POSITIONS_LIST, VELOCITIES_LIST, info_array, disk_filename 
 
 
-def load_and_plot_data(filename_pos, filename_vel, PlotName="DiskPlot", max_z=1):
+def load_and_plot_data(filename_pos, filename_vel, PlotName="DiskPlot"):
     # 1. Get the directory where THIS script is located
     #script_dir = Path(__file__).parent
 
@@ -618,9 +618,6 @@ def load_and_plot_data(filename_pos, filename_vel, PlotName="DiskPlot", max_z=1)
     #print(f"Successfully loaded from: {file_path_pos}")
     POSITIONS_LIST = np.load(file_path_pos)
     VELOCITIES_LIST = np.load(filename_vel)
-
-    max_size = 150
-    min_size = 10
     
     # Setup 3x4 plot grid
     fig, ax = plt.subplots(4, 4, figsize=(12, 8))
@@ -645,11 +642,10 @@ def load_and_plot_data(filename_pos, filename_vel, PlotName="DiskPlot", max_z=1)
         b = i % 4
         x0 = star1[0]
         y0 = star1[1]
-        normalized_z = star2[2] / max_z
-        marker_size = max_size - normalized_z * (max_size - min_size)
+
         sc = ax[a,b].scatter(disk[:,0] - x0, disk[:,1] - y0, c=disk_speed, cmap="hot", s=1, alpha=1)
         ax[a,b].scatter(0, 0, c='blue', s=100)
-        ax[a,b].scatter(star2[0] - x0, star2[1] - y0, c='green', s=marker_size)
+        ax[a,b].scatter(star2[0] - x0, star2[1] - y0, c='green', s=100)
         lim = 350
         ax[a,b].set_xlim(-lim, lim)
         ax[a,b].set_ylim(-lim, lim)
@@ -660,12 +656,13 @@ def load_and_plot_data(filename_pos, filename_vel, PlotName="DiskPlot", max_z=1)
     plt.tight_layout()
     cbar = fig.colorbar(sc, ax=ax.ravel().tolist(), shrink=0.95)
     cbar.set_label('Velocity Magnitude [km/s]')
-    s = filename_pos.split("_")
+    #s = filename_pos.split("_")
     #try:
     #    fig.suptitle(f"Interaction between Stars {s[2]} and {s[3]} at Cluster Time: {s[1]}")
     #except IndexError:
     #    fig.suptitle("Ugh, no title")
-    fig.savefig(f"PLOT/{PlotName}{filename_pos[18:-4]}.png")
+    s1 = filename_pos.split("__")[1]
+    fig.savefig(f"PLOT/{PlotName}__{s1[:-4]}.png")
     #plt.show()
 
 
