@@ -12,6 +12,8 @@ def distVlostPlot_fromData(InfoName="FullRunNew",PlotName="dVlPlot"):
     # Define the directory
     directory = Path('DATA/')
     info_dict = {}
+    get_final_interaction_dict = {}
+    prelim_min_bfs = {}
 
     # Iterate over all items in the directory
     for file_path in directory.glob(f"{InfoName}*"):
@@ -37,29 +39,39 @@ def distVlostPlot_fromData(InfoName="FullRunNew",PlotName="dVlPlot"):
             min_dist = np.min(np.linalg.norm(pert_pos, axis=1))
             info_dict[dict_string]["min_dist"] = min_dist
             info_dict[dict_string]["star_mass"] = m1
+            info_dict[dict_string]["a"] = float(a)
             info_dict[dict_string]["b"] = float(b)
-            info_dict[dict_string]["star_pos_start"] = pos_list[0,0,:]
-            info_dict[dict_string]["star_pos_end"] = pos_list[0,-1,:]
-            info_dict[dict_string]["disk_pos_start"] = pos_list[2:,0,:]
-            info_dict[dict_string]["disk_pos_end"] = pos_list[2:,-1,:]
+            info_dict[dict_string]["star_pos"] = pos_list[0,:,:]
+            info_dict[dict_string]["disk_pos"] = pos_list[2:,:,:]
 
         if "VelKMS" in file_path.stem:
             # here we get the velocity data
             vel_list = np.load(file_path)
-            info_dict[dict_string]["star_vel_start"] = vel_list[0,0,:]
-            info_dict[dict_string]["star_vel_end"] = vel_list[0,-1,:]
-            info_dict[dict_string]["disk_vel_start"] = vel_list[2:,0,:]
-            info_dict[dict_string]["disk_vel_end"] = vel_list[2:,-1,:]
+            info_dict[dict_string]["star_vel"] = vel_list[0,:,:]
+            info_dict[dict_string]["disk_vel"] = vel_list[2:,:,:]
 
     fig, ax = plt.subplots(3,1,sharex=True, figsize=(12,8))
     for key, inner_dict in info_dict.items():
         print(key)
-        bf_start = get_bound_particles_fraction(inner_dict["star_mass"], inner_dict["star_pos_start"], inner_dict["star_vel_start"], inner_dict["disk_pos_start"], inner_dict["disk_vel_start"])
-        bf_end = get_bound_particles_fraction(inner_dict["star_mass"], inner_dict["star_pos_end"], inner_dict["star_vel_end"], inner_dict["disk_pos_end"], inner_dict["disk_vel_end"])
+        #bf = [get_bound_particles_fraction(inner_dict["star_mass"], inner_dict["star_pos"][i,:], inner_dict["star_vel"][i,:], inner_dict["disk_pos"][:,i,:], inner_dict["disk_vel"][:,i,:]) for i in range(np.shape(inner_dict["star_pos"])[0])]
+        bf = []
+        print(np.shape(inner_dict["star_pos"]))
+        print(np.shape(inner_dict["star_vel"]))
+        print(np.shape(inner_dict["disk_pos"]))
+        print(np.shape(inner_dict["disk_vel"]))
+        for i in range(1001):
+            try:
+                bf.append(get_bound_particles_fraction(inner_dict["star_mass"], inner_dict["star_pos"][i,:], inner_dict["star_vel"][i,:], inner_dict["disk_pos"][:,i,:], inner_dict["disk_vel"][:,i,:]))
+            except IndexError as e:
+                print(e)
+
+        if (inner_dict["a"] not in get_final_interaction_dict.keys()) or (inner_dict["b"] > get_final_interaction_dict[inner_dict["a"]]):
+            prelim_min_bfs[inner_dict["a"]] = np.min(bf)
+        bf_start = bf[0]
+        bf_end = bf[-1]
         frac_lost = bf_end / bf_start
-        print(bf_start, bf_end, frac_lost)
         if (inner_dict["min_dist"] > 7500) or (frac_lost > 2.5):
-            print(f"AAAAAAAAAAAAAH Value too large: min_dist={inner_dict["min_dist"]}, frac_lost={frac_lost}")
+            print(f"Value too large: min_dist={inner_dict["min_dist"]}, frac_lost={frac_lost}")
             continue
         color = "blue"
         alpha = 1
@@ -77,6 +89,21 @@ def distVlostPlot_fromData(InfoName="FullRunNew",PlotName="dVlPlot"):
     ax[2].set_ylabel("Fraction of Particles bound at end")
     plt.tight_layout()
     fig.savefig(f"PLOT/{PlotName}.png")
+
+    # --- Histogram of bound fraction of particles ---
+    fig, ax = plt.subplots(figsize=(12,8))
+    ax.hist(prelim_min_bfs.values())
+    ax.set_xlabel("Fraction of bound particles")
+    ax.set_ylabel("Amount")
+    # --- calculate fraction of destroyed disks (bound frac < 0.5)
+    # Convert dictionary values to a NumPy array first
+    bfs_values = np.array(list(prelim_min_bfs.values()))
+    mask_destroyed = bfs_values < 0.5
+    destroyed_frac = np.sum(mask_destroyed) / len(prelim_min_bfs.values())
+    fig.suptitle(f"Fraction of destroyed disks (<0.5): {destroyed_frac:.4f}")
+    fig.savefig(f"PLOT/Hist_{PlotName}.png")
+    #plt.show()
+    
         
 
 
