@@ -6,7 +6,7 @@ from amuse.couple import bridge
 from amuse.ext.protodisk import ProtoPlanetaryDisk
 import pandas as pd
 
-from functions import get_bound_particles_fraction, write_bound_frac, calculate_energy, plot_energy_evolution
+from functions import get_bound_particles_fraction, write_bound_frac, calculate_energy, plot_energy_evolution, bound_fraction_plot
 
 
 # --- Simulation Codes ---
@@ -391,11 +391,11 @@ def run_all_cluster_sims(interactions_file):
             temp_star, temp_disk, pos_list, vel_list = simulate_disk_new(star, perturber, disk, f"DISK/DiskSave__{save_name}.amuse", t_sim=t_sim)
             
             # Save raw trajectory data
-            filename_pos = f"DATA/FullRunNewPosAU__{save_name}.npy"
-            filename_vel = f"DATA/FullRunNewVelKMS__{save_name}.npy"
+            filename_pos = f"DATA/FullRun0ClusVelPosAU__{save_name}.npy"
+            filename_vel = f"DATA/FullRun0ClusVelVelKMS__{save_name}.npy"
             np.save(filename_pos, pos_list)
             np.save(filename_vel, vel_list)
-            load_and_plot_data(filename_pos, filename_vel, PlotName=f"DEBUG_{idx}_{i}")
+            load_and_plot_data(filename_pos, filename_vel, PlotName=f"FullRun0ClusVel_{idx}_{i}")
 
             # find closest approach and fraction of particles lost during this encounter
             min_dist = np.min(np.absolute(np.linalg.norm(pos_list[1], axis=1) - np.linalg.norm(pos_list[0], axis=1)))
@@ -408,7 +408,7 @@ def run_all_cluster_sims(interactions_file):
             else:
                 frac_lost.append(0.0)
 
-    bound_fraction_plot(enc_dists, frac_lost, PlotName=f"DistVSLost__{save_name}")
+    bound_fraction_plot(enc_dists, frac_lost, PlotName=f"DistVSLost0ClusVel__{save_name}")
 
 
 def run_sim_2disk(interactions_file, s1id, s2id, index=0, t_sim=500|units.yr):
@@ -563,7 +563,7 @@ def load_and_animate_data(filename_pos, filename_vel):
     ax.set_xlabel("x [AU]")
     ax.set_ylabel("y [AU]")
     s = filename_pos.split("_")   
-    ax.set_title(f"Interaction between Masses {s[-2]} and {s[-1][:-4]} at Cluster Time: {s[2]}")
+    ax.set_title(f"Interaction between Masses {s[-2]} and {s[-1][:-4]} at Cluster Time: {s[2][:-3]}yr")
     
     # Initialize the plot elements
     # Star 1 (Red, centered at 0,0 after subtraction)
@@ -740,7 +740,7 @@ def load_and_plot_data(filename_pos, filename_vel, PlotName="DiskPlot"):
         ax[a,b].set_ylim(-lim, lim)
         ax[a,b].set_xlabel("x [AU]")
         ax[a,b].set_ylabel("y [AU]")
-        ax[a,b].set_title(f"{i * plot_every_n_steps}Myr")
+        ax[a,b].set_title(f"{i * plot_every_n_steps}yr")
 
     # --- Finalize Layout ---
     plt.tight_layout()
@@ -872,19 +872,65 @@ def get_radius_from_mass(mass):
         return (mass / Ms)**0.57 | units.RSun
 
 
+# --- Saving + Loading Disks
+def save_disk(disk, filename):
+    '''
+    Careful: Causes problems if subfolder for saving doesnt already exist or if the file already exists
+    
+    :param disk: the disk to be saved
+    :param filename: where to save the disk
+    '''
+    write_set_to_file(disk, filename, "amuse", overwrite_file=True)
+
+
+def load_disk(filename):
+    """
+    Loads a saved AMUSE particle set from a file and separates it into a central 
+    star and a protoplanetary disk based on mass.
+
+    This function assumes a specific mass hierarchy: particles with mass >= 1 MSun 
+    are treated as stars, and particles < 1 MSun are treated as disk components.
+    It is typically used to resume simulations or analyze saved states.
+
+    Parameters
+    ----------
+    filename : str
+        The path to the AMUSE data file (usually .amuse format) containing 
+        the particle set.
+
+    Returns
+    -------
+    tuple (amuse.datamodel.particles.Particle, amuse.datamodel.particles.Particles)
+        - The first element is the primary Star particle (the first massive object found).
+        - The second element is a Particles set containing all Disk components.
+    """
+
+    # Load the entire particle set (Star + Disk) from the AMUSE file
+    all_particles = read_set_from_file(filename, "amuse")
+    # --- Separation Logic ---
+    # Create boolean masks to separate massive objects (stars) from light objects (disk)
+    star_mask = (all_particles.mass >= 1 | units.MSun)
+    disk_mask = (all_particles.mass < 1 | units.MSun)
+    # Apply masks to create distinct subsets
+    disk = all_particles[disk_mask]
+    stars = all_particles[star_mask]
+    # Return the primary star and the entire disk set
+    return stars[0], disk
+
+
 # --- Examples for Usage ---
 if __name__ == "__main__":
-    print("ATTENTION: The filenames and IDs will have to be adapted to existing files!")
+    #print("ATTENTION: The filenames and IDs will have to be adapted to existing files!")
 
     # --- run all sims from interaction file ---
-    #run_all_cluster_sims("Interactions stopping conditions_100Myr.csv")
+    #run_all_cluster_sims("Cluster_velocity_0_good.csv")
 
     # --- run sim with disks around both stars for stars specified
     #run_sim_2disk("Interactions stopping conditions_100Myr.csv", 113871276108901526, 15793569915568245741, t_sim=500|units.yr)
     
     # --- make animation from the data files provided
-    #fp = "Data/FullRunNewPosAU__14971755.7609Myr_7_1_1000_2.000_1.806.npy"
-    #fv = "Data/FullRunNewVelKMS__14971755.7609Myr_7_1_1000_2.000_1.806.npy"
-    #load_and_animate_data(fp, fv)
+    fp = "Data/FullRunNewPosAU__100448.652139Myr_40_0_1000_1.076_9.331.npy"
+    fv = "Data/FullRunNewVelKMS__100448.652139Myr_40_0_1000_1.076_9.331.npy"
+    load_and_animate_data(fp, fv)
 
 

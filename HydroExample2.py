@@ -22,6 +22,24 @@ from functions import get_bound_particles_fraction, write_bound_frac, calculate_
 
 
 def get_radius_from_mass(mass):
+    """
+    Estimates the radius of a Main Sequence star based on its mass using 
+    standard empirical power-law relations.
+
+    This function applies a piecewise approximation for the Mass-Radius relation:
+    - For stars M > 1 MSun: R ~ M^0.8
+    - For stars M <= 1 MSun: R ~ M^0.57 (approximating the lower main sequence)
+
+    Parameters
+    ----------
+    mass : scalar(units.MSun)
+        The mass of the star.
+
+    Returns
+    -------
+    scalar(units.RSun)
+        The estimated radius of the star.
+    """
     Ms = 1 | units.MSun
     if mass > Ms:
         return (mass / Ms)**0.8 | units.RSun
@@ -127,27 +145,74 @@ def get_initial_values(arr):
 
 
 def get_initial_values_new(arr):
+    """
+    Extracts and computes initial kinematic properties for a stellar encounter from a data row.
 
+    This function parses a single row (pandas Series or dict-like object) containing 
+    raw coordinate and velocity data for two interacting particles. It computes the 
+    relative position and velocity vectors of the second particle with respect to 
+    the first, assigns physical units (AMUSE units), and derives stellar radii 
+    based on mass.
+
+    Parameters
+    ----------
+    arr : pandas.Series or dict
+        A row containing the following keys (column names):
+        - 'particle1_id', 'particle2_id'
+        - 'time (yr)'
+        - 'particle1_x (kpc)', 'particle1_y (kpc)', 'particle1_z (kpc)'
+        - 'particle2_x (kpc)', 'particle2_y (kpc)', 'particle2_z (kpc)'
+        - 'particle1_vx (km/s)', 'particle1_vy (km/s)', 'particle1_vz (km/s)'
+        - 'particle2_vx (km/s)', 'particle2_vy (km/s)', 'particle2_vz (km/s)'
+        - 'particle1_mass (MSun)', 'particle2_mass (MSun)'
+
+    Returns
+    -------
+    tuple
+        A tuple containing the following elements:
+        - star1_id (int/str): ID of the primary star.
+        - star2_id (int/str): ID of the secondary star.
+        - mass_1 (quantity): Mass of the primary star (with units.MSun).
+        - mass_2 (quantity): Mass of the secondary star (with units.MSun).
+        - radius_1 (quantity): Radius of the primary star (derived from mass).
+        - radius_2 (quantity): Radius of the secondary star (derived from mass).
+        - time (quantity): The timestamp of the interaction (with units.yr).
+        - rel_dist_vec (quantity): 3D vector [x, y, z] of the secondary star's 
+          position relative to the primary, in units.kpc.
+        - rel_vel_vec (quantity): 3D vector [vx, vy, vz] of the secondary star's 
+          velocity relative to the primary, in units.kms.
+
+    Notes
+    -----
+    - Uses `get_radius_from_mass` to determine stellar radii. Ensure this helper 
+      function is defined in the scope.
+    - All output vectors are in the frame where Particle 1 is at the origin (0,0,0).
+    """
+
+    # --- Extract Identifiers and Time ---
     star1_id = arr["particle1_id"]            
     star2_id = arr["particle2_id"]
     time = arr["time (yr)"] | units.yr
 
+    # --- Extract Raw Coordinates (Particle 1) ---
     p1_x_kpc = arr["particle1_x (kpc)"]
     p1_y_kpc = arr["particle1_y (kpc)"]
     p1_z_kpc = arr["particle1_z (kpc)"]
-    
-    p2_x_kpc = arr["particle2_x (kpc)"]
-    p2_y_kpc = arr["particle2_y (kpc)"]
-    p2_z_kpc = arr["particle2_z (kpc)"]
 
     p1_vx_kms = arr["particle1_vx (km/s)"]
     p1_vy_kms = arr["particle1_vy (km/s)"]
     p1_vz_kms = arr["particle1_vz (km/s)"]
+    
+    # --- Extract Raw Coordinates (Particle 2) ---
+    p2_x_kpc = arr["particle2_x (kpc)"]
+    p2_y_kpc = arr["particle2_y (kpc)"]
+    p2_z_kpc = arr["particle2_z (kpc)"]
 
     p2_vx_kms = arr["particle2_vx (km/s)"]
     p2_vy_kms = arr["particle2_vy (km/s)"]
     p2_vz_kms = arr["particle2_vz (km/s)"]
 
+    # --- Compute Relative Frames ---
     rel_dx_kpc = p2_x_kpc - p1_x_kpc
     rel_dy_kpc = p2_y_kpc - p1_y_kpc
     rel_dz_kpc = p2_z_kpc - p1_z_kpc
@@ -156,12 +221,14 @@ def get_initial_values_new(arr):
     rel_dvy_kms = p2_vy_kms - p1_vy_kms
     rel_dvz_kms = p2_vz_kms - p1_vz_kms
    
+    # --- Assign units ---
     mass_1 = arr["particle1_mass (MSun)"] | units.MSun
     mass_2 = arr["particle2_mass (MSun)"] | units.MSun
      
     rel_dist_vec = [rel_dx_kpc, rel_dy_kpc, rel_dz_kpc] | units.kpc
     rel_vel_vec = [rel_dvx_kms, rel_dvy_kms, rel_dvz_kms] | units.kms
 
+    # --- Derive Radii ---
     radius_1 = get_radius_from_mass(mass_1)     # 1 | units.RSun
     radius_2 = get_radius_from_mass(mass_2)     # 1 | units.RSun
 
@@ -611,16 +678,44 @@ def test_given_disk(ini_file=None,
 def simulate_disk_new(STAR, PERTURBER, DISK, disk_savename,
                       t_sim=500|units.yr, dt=1|units.yr):
 
+    """
+    Runs a coupled hydrodynamic and N-body simulation of a single protoplanetary disk 
+    encountering a passing perturber star.
+
+    This function sets up a "Bridge" between a gravity solver (Hermite) and a 
+    hydrodynamics solver (Fi). It evolves the system, handles potential crashes 
+    gracefully, records the trajectory history, and saves the final state to disk.
+
+    Parameters
+    ----------
+    STAR : amuse.datamodel.particles.Particles
+        A particle set containing the primary star (Host).
+    PERTURBER : amuse.datamodel.particles.Particles
+        A particle set containing the secondary star (Perturber).
+    DISK : amuse.datamodel.particles.Particles
+        The SPH particle set representing the gas disk around the primary star.
+    disk_savename : str
+        The filename (path) where the final state of the simulation (AMUSE format)
+        will be saved. This allows the disk to be reused in subsequent simulations.
+    t_sim : scalar(units.yr), optional
+        The total duration of the simulation (default is 500 years).
+    dt : scalar(units.yr), optional
+        The time interval for data logging (default is 1 year).
+
+    Returns
+    -------
+    tuple
+        - star_primary (Particle): The updated particle object for the primary star.
+        - disk (Particles): The updated set of particles for the disk.
+        - POSITIONS_LIST (np.ndarray): 3D array (N, T, 3) of XYZ positions [AU].
+        - VELOCITIES_LIST (np.ndarray): 3D array (N, T, 3) of Vxyz velocities [km/s].
+    """
     # Converter for the hydro code (scaled to disk properties)
     hydro_converter = nbody_system.nbody_to_si(STAR.mass[0], 100|units.AU) #np.mean(DISK.position.value_in(units.AU))|units.AU)
         
     # Center everything on STAR
-    #STAR.position -= STAR.position
     PERTURBER.position += STAR.position
-    #DISK.position -= STAR.position
-    #STAR.velocity -= STAR.velocity
     PERTURBER.velocity += STAR.velocity
-    #DISK.velocity -= STAR.velocity
 
     # Particle set for all massive N-body objects
     stars = Particles()
@@ -709,19 +804,49 @@ def simulate_disk_new(STAR, PERTURBER, DISK, disk_savename,
 
 
 def load_and_plot_data(filename_pos, filename_vel, PlotName="DiskPlot"):
-    # 1. Get the directory where THIS script is located
-    #script_dir = Path(__file__).parent
+    """
+    Loads simulation trajectory data and generates a 4x4 grid of snapshots 
+    visualizing the time evolution of the system.
 
-    # 2. Create the full path to your data file
-    #file_path_pos = script_dir / filename_pos
-    file_path_pos = filename_pos
-    #print(f"Successfully loaded from: {file_path_pos}")
-    POSITIONS_LIST = np.load(file_path_pos)
+    This function reads NumPy arrays containing position and velocity histories,
+    calculates a stride to capture 16 evenly spaced snapshots, and plots the 
+    system state centered on the primary star. The disk particles are colored 
+    according to their velocity magnitude.
+
+    Parameters
+    ----------
+    filename_pos : str
+        Path to the .npy file containing the position history. 
+        Shape expected: (N_particles, N_timesteps, 3).
+        Index 0 is assumed to be the Primary Star; Index 1 the Secondary Star.
+    filename_vel : str
+        Path to the .npy file containing the velocity history.
+        Shape expected: (N_particles, N_timesteps, 3).
+    PlotName : str, optional
+        Prefix for the output image filename (default is "DiskPlot").
+
+    Returns
+    -------
+    None
+        Saves a PNG image to the 'PLOT/' directory.
+
+    Notes
+    -----
+    - **Coordinate System:** The plots are transformed to the rest frame of 
+      Star 1 (the primary). Star 1 is always at (0,0).
+    - **Filename Parsing:** The function assumes `filename_pos` contains a double 
+      underscore `__` to separate metadata, used for generating the output filename.
+    - **Axis Limits:** The plots are hardcoded to a fixed view of +/- 350 AU.
+    """
+
+    # --- Load Data ---
+    POSITIONS_LIST = np.load(filename_pos)
     VELOCITIES_LIST = np.load(filename_vel)
     
-    # Setup 3x4 plot grid
+    # --- Configure Plot Grid ---
     fig, ax = plt.subplots(4, 4, figsize=(12, 8))
-    j = 0 # Plot index
+
+    # Calculate stride: We want exactly 16 snapshots spanning the full simulation.
     plot_every_n_steps = int(POSITIONS_LIST.shape[1] / 15) # Aim for 16 plots
     if plot_every_n_steps == 0:
         plot_every_n_steps = 1
@@ -729,41 +854,57 @@ def load_and_plot_data(filename_pos, filename_vel, PlotName="DiskPlot"):
     for i in range(16):
         try:
             idx = i*plot_every_n_steps
+
+            # --- Extract Data ---
+            # Index 0: Primary Star
+            # Index 1: Secondary Star (Perturber)
+            # Index 2+: Disk Particles
             star1 = POSITIONS_LIST[0,idx,:]
             star2 = POSITIONS_LIST[1,idx,:]
             disk = POSITIONS_LIST[2:,idx,:]
             disk_vel = VELOCITIES_LIST[2:,idx,:]
+
+            # Calculate speed scalar for coloring (hot/cold particles)
             disk_speed = np.linalg.norm(disk_vel, axis=1)
+
         except IndexError:
             print(f"IndexError at index {i} with stepsize {plot_every_n_steps}")
             continue
-
+        
+        # Map the linear loop index 'i' to the grid coordinates (row, col)
         a = int(i/4)
         b = i % 4
+
+        # --- Center on Star 1 ---
         x0 = star1[0]
         y0 = star1[1]
 
+        # --- Draw Scatter Plots ---
+        # 1. Disk particles (colored by speed)
         sc = ax[a,b].scatter(disk[:,0] - x0, disk[:,1] - y0, c=disk_speed, cmap="hot", s=1, alpha=1)
+        # 2. Star 1 (Blue, fixed at center)
         ax[a,b].scatter(0, 0, c='blue', s=100)
+        # 3. Star 2 (Green, relative position)
         ax[a,b].scatter(star2[0] - x0, star2[1] - y0, c='green', s=100)
+        
+        # --- Formatting ---
         lim = 350
         ax[a,b].set_xlim(-lim, lim)
         ax[a,b].set_ylim(-lim, lim)
         ax[a,b].set_xlabel("x [AU]")
         ax[a,b].set_ylabel("y [AU]")
-        ax[a,b].set_title(f"{i * plot_every_n_steps}Myr")
+        ax[a,b].set_title(f"{i * plot_every_n_steps}yr")
 
+    # --- Finalize Layout ---
     plt.tight_layout()
     cbar = fig.colorbar(sc, ax=ax.ravel().tolist(), shrink=0.95)
     cbar.set_label('Velocity Magnitude [km/s]')
-    #s = filename_pos.split("_")
-    #try:
-    #    fig.suptitle(f"Interaction between Stars {s[2]} and {s[3]} at Cluster Time: {s[1]}")
-    #except IndexError:
-    #    fig.suptitle("Ugh, no title")
+
+    # --- Save Figure ---
     s1 = filename_pos.split("__")[1]
     fig.savefig(f"PLOT/{PlotName}__{s1[:-4]}.png")
     #plt.show()
+    plt.close(fig)
 
 
 def load_and_animate_data(filename_pos, filename_vel):
@@ -857,7 +998,7 @@ def load_and_animate_data(filename_pos, filename_vel):
         # Update the time step text
         bf = get_bound_particles_fraction(float(s[6]) | units.MSun, star1_positions[i,:], star1_velocities[i,:], disk_positions[:,i,:], disk_velocities[:,i,:])
 
-        time_text.set_text(f"Time Step: {i} / {N_timesteps - 1} \nBound Fraction: {bf:.3f}r \nperturber z-dist: {star2_z_rel:.1f}au")
+        time_text.set_text(f"Time Step: {i} / {N_timesteps - 1} \nBound Fraction: {bf:.3f} \nperturber z-dist: {star2_z_rel:.1f}au")
         #bound_frac_text.set_text(f"Bound Fraction: {bf:.3f}")
         # Update z_dist_text
         #z_dist_text.set_text(f"perturber z-dist: {star2_z_rel:.1f}au")
@@ -901,12 +1042,37 @@ def save_disk(disk, filename):
 
 
 def load_disk(filename):
+    """
+    Loads a saved AMUSE particle set from a file and separates it into a central 
+    star and a protoplanetary disk based on mass.
+
+    This function assumes a specific mass hierarchy: particles with mass >= 1 MSun 
+    are treated as stars, and particles < 1 MSun are treated as disk components.
+    It is typically used to resume simulations or analyze saved states.
+
+    Parameters
+    ----------
+    filename : str
+        The path to the AMUSE data file (usually .amuse format) containing 
+        the particle set.
+
+    Returns
+    -------
+    tuple (amuse.datamodel.particles.Particle, amuse.datamodel.particles.Particles)
+        - The first element is the primary Star particle (the first massive object found).
+        - The second element is a Particles set containing all Disk components.
+    """
+
+    # Load the entire particle set (Star + Disk) from the AMUSE file
     all_particles = read_set_from_file(filename, "amuse")
+    # --- Separation Logic ---
+    # Create boolean masks to separate massive objects (stars) from light objects (disk)
     star_mask = (all_particles.mass >= 1 | units.MSun)
     disk_mask = (all_particles.mass < 1 | units.MSun)
+    # Apply masks to create distinct subsets
     disk = all_particles[disk_mask]
     stars = all_particles[star_mask]
-    print(stars)
+    # Return the primary star and the entire disk set
     return stars[0], disk
 
 
@@ -1015,21 +1181,63 @@ if __name__ in ('__main__'):
     #fv2 = "Data/DiskTest2VelKMS_0Myr_-1_-1_1000yr_1MSun_20MSun.npy"
     #load_and_plot_data(fp, fv)
     #load_and_animate_data(fp2, fv2)
-    run_sim()
+    #run_sim()
     #run_test_disk()
     #disk = load_disk("DISK/DiskTest_0Myr_-1_-1_500yr_1MSun_1MSun__105.34723597382165__203.50617988729877__0.01024626570596548.amuse")
     #print(disk.center_of_mass().value_in(units.AU))
     #disk.move_to_center()
     #print(disk.center_of_mass().value_in(units.AU))
+    fp = "Data/FullRunNewPosAU__100448.652139Myr_40_0_1000_1.076_9.331.npy"
+    fv = "Data/FullRunNewVelKMS__100448.652139Myr_40_0_1000_1.076_9.331.npy"
+    load_and_plot_data(fp, fv, PlotName="ReportPlot")
 
 
     
     
 
 
-def simulate_2disk_new(STAR, PERTURBER, DISK1, DISK2, disk_savename,
+def simulate_2disk_new(STAR, PERTURBER, DISK1, DISK2,
                       t_sim=500|units.yr, dt=1|units.yr):
+   
+    """
+    Runs a coupled N-body and Hydrodynamic simulation of two stars, each with its own
+    protoplanetary disk, interacting over a specified timeframe.
 
+    This function sets up a "Bridge" system in AMUSE, coupling:
+    1. A gravity solver (Hermite) for the stellar dynamics.
+    2. A hydrodynamics solver (Fi) for the gas/disk particles.
+
+    The stars affect the gas via gravity, and the gas affects the stars via gravity 
+    (two-way coupling). Position and velocity data is logged at every timestep `dt`.
+
+    Parameters
+    ----------
+    STAR : amuse.datamodel.particles.Particles
+        A single-particle set representing the primary star (Host).
+    PERTURBER : amuse.datamodel.particles.Particles
+        A single-particle set representing the secondary star (Perturber).
+    DISK1 : amuse.datamodel.particles.Particles
+        The SPH particle set representing the disk around the primary star.
+    DISK2 : amuse.datamodel.particles.Particles
+        The SPH particle set representing the disk around the secondary star.
+    t_sim : scalar(units.yr), optional
+        The total physical time to evolve the simulation (default 500 yr).
+    dt : scalar(units.yr), optional
+        The interval at which data is logged to the output arrays (default 1 yr).
+
+    Returns
+    -------
+    tuple
+        A tuple containing the following elements in order:
+        - star_primary (Particle): The updated particle object for the primary star.
+        - disk1 (Particles): The updated set of particles for Disk 1.
+        - disk2 (Particles): The updated set of particles for Disk 2.
+        - POSITIONS_LIST (np.ndarray): A 3D array of shape (N_total, N_steps, 3) 
+          containing XYZ positions in AU. Index 0 is Star1, Index 1 is Star2, 
+          Indices 2+ are disk particles.
+        - VELOCITIES_LIST (np.ndarray): A 3D array of shape (N_total, N_steps, 3) 
+          containing Vxyz velocities in km/s.
+    """
     # Converter for the hydro code (scaled to disk properties)
     hydro_converter = nbody_system.nbody_to_si(STAR.mass[0], 100|units.AU) #np.mean(DISK.position.value_in(units.AU))|units.AU)
 
@@ -1104,11 +1312,6 @@ def simulate_2disk_new(STAR, PERTURBER, DISK1, DISK2, disk_savename,
             POSITIONS_LIST[j+2][i][:] = np.array([p.x.value_in(units.AU), p.y.value_in(units.AU), p.z.value_in(units.AU)])
             VELOCITIES_LIST[j+2][i][:] = np.array([p.vx.value_in(units.kms), p.vy.value_in(units.kms), p.vz.value_in(units.kms)])
 
-    # --- Save the disk for further runs with the same disk ---
-    ch2_disk1.copy()
-    ch2_disk2.copy()
-    ch2_stars.copy()
-    #save_disk(all_particles, disk_savename)
     # --- Cleanup ---
     gravity.stop()
     hydro.stop()

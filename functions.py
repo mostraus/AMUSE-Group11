@@ -8,7 +8,100 @@ from pathlib import Path
 
 
 
-def distVlostPlot_fromData(InfoName="FullRunNew",PlotName="dVlPlot"):
+
+def EffectOnBoundPlot_fromData(InfoName="FullRun0ClusVel",PlotName="dVlPlot0ClusVel1"):
+
+    directory = Path('DATA/')
+    info_dict = {}
+    bf_mins = []
+    mass_ratios = []
+    min_dists = []
+
+    # Iterate over all items in the directory
+    for file_path in directory.glob(f"{InfoName}*"):
+        # Check if it is a file (and not a directory)
+        if not file_path.is_file():
+            print("ERROR on: ", file_path.name)
+            continue
+        print(f"Getting Info from {file_path.stem}")
+        # get info from filename
+        file_info = file_path.stem.split("_")
+        a = file_info[3]
+        b = float(file_info[4])
+        m1 = float(file_info[-2]) | units.MSun
+        m2 = float(file_info[-1][:-4]) | units.MSun
+
+        if a not in info_dict:
+            info_dict[a] = {"b":-1}
+
+        if b >= info_dict[a]["b"]:
+            if "PosAU" in file_path.stem:
+                # here we get the position data
+                pos_list = np.load(file_path)
+                star_pos = pos_list[0,:,:]
+                pert_pos = pos_list[1,:,:] - star_pos
+
+                min_dist = np.min(np.linalg.norm(pert_pos, axis=1))
+                info_dict[a]["min_dist"] = min_dist
+                info_dict[a]["star_mass"] = m1
+                info_dict[a]["perturber_mass"] = m2
+                info_dict[a]["b"] = b
+                info_dict[a]["star_pos"] = star_pos
+                info_dict[a]["disk_pos"] = pos_list[2:,:,:]
+
+            if "VelKMS" in file_path.stem:
+                # here we get the velocity data
+                vel_list = np.load(file_path)
+                info_dict[a]["star_vel"] = vel_list[0,:,:]
+                info_dict[a]["disk_vel"] = vel_list[2:,:,:]
+
+    for key, inner_dict in info_dict.items():
+        print(key)
+
+        bf = []
+        for i in range(1001):
+            try:
+                bf.append(get_bound_particles_fraction(inner_dict["star_mass"], inner_dict["star_pos"][i,:], inner_dict["star_vel"][i,:], inner_dict["disk_pos"][:,i,:], inner_dict["disk_vel"][:,i,:]))
+            except Exception as e:
+                print(e)
+
+        #bf_mins.append(np.min(bf))
+        bf_mins.append(bf[-1])
+        mass_ratios.append(inner_dict["perturber_mass"] / inner_dict["star_mass"])
+        min_dists.append(inner_dict["min_dist"])
+
+    # turning the lists into np arrays
+    bf_mins, mass_ratios, min_dists = np.array(bf_mins), np.array(mass_ratios), np.array(min_dists)
+    
+    # --- Disk Destruction vs Closest Separation Plot ---
+    fig, ax = plt.subplots(figsize=(12,8))
+    scat = ax.scatter(min_dists, bf_mins, c=mass_ratios, cmap="plasma")
+    ax.hlines(0.5, min(min_dists), max(min_dists), linestyles="--")
+    ax.set_xlabel("Closest Separation [AU]")
+    ax.set_ylabel("Final Bound fraction")
+    cbar = plt.colorbar(scat, ax=ax)
+    cbar.set_label('Mass Ratio (M_p / M_s)')
+    ax.set_title("Disk Destruction vs Closest Separation")
+    fig.savefig(f"PLOT/{PlotName}.png")
+
+    
+    # --- Histogram of bound fraction of particles ---
+    fig, ax = plt.subplots(figsize=(12,8))
+    ax.hist(bf_mins)
+    ax.set_xlabel("Fraction of bound particles")
+    ax.set_ylabel("Amount")
+    # --- calculate fraction of destroyed disks (bound frac < 0.5)
+    # Convert dictionary values to a NumPy array first
+    mask_destroyed = bf_mins < 0.5
+    destroyed_frac = np.sum(mask_destroyed) / 100 #len(bf_mins)
+    fig.suptitle(f"Fraction of destroyed disks (<0.5): {destroyed_frac}")
+    fig.savefig(f"PLOT/Hist_{PlotName}.png")
+
+    return bf_mins, mass_ratios, min_dists
+
+
+
+def distVlostPlot_fromData(InfoName="FullRun0ClusVel",PlotName="dVlPlot0ClusVel1"):
     # Define the directory
     directory = Path('DATA/')
     info_dict = {}
@@ -55,10 +148,6 @@ def distVlostPlot_fromData(InfoName="FullRunNew",PlotName="dVlPlot"):
         print(key)
         #bf = [get_bound_particles_fraction(inner_dict["star_mass"], inner_dict["star_pos"][i,:], inner_dict["star_vel"][i,:], inner_dict["disk_pos"][:,i,:], inner_dict["disk_vel"][:,i,:]) for i in range(np.shape(inner_dict["star_pos"])[0])]
         bf = []
-        print(np.shape(inner_dict["star_pos"]))
-        print(np.shape(inner_dict["star_vel"]))
-        print(np.shape(inner_dict["disk_pos"]))
-        print(np.shape(inner_dict["disk_vel"]))
         for i in range(1001):
             try:
                 bf.append(get_bound_particles_fraction(inner_dict["star_mass"], inner_dict["star_pos"][i,:], inner_dict["star_vel"][i,:], inner_dict["disk_pos"][:,i,:], inner_dict["disk_vel"][:,i,:]))
@@ -203,5 +292,45 @@ def bound_fraction_plot(enc_distances, frac_lost_list, PlotName="FracLostPlot"):
     fig.savefig(f"PLOT/{PlotName}.png")
 
 
+def combined_plot_DiskDestruction():
+    plotname_tot = "CombinedRunTot"
+    plotname1 = "CombinedRun0"
+    fname1 = "FullRun0ClusVel"
+    bf_mins1, mass_ratios1, min_dists1 = EffectOnBoundPlot_fromData(fname1, plotname1)
+    plotname2 = "CombinedRun40"
+    fname2 = "FullRunNew"
+    bf_mins2, mass_ratios2, min_dists2 = EffectOnBoundPlot_fromData(fname2, plotname2)
+
+    bf_mins = np.concatenate((bf_mins1, bf_mins2))
+    mass_ratios = np.concatenate((mass_ratios1, mass_ratios2))
+    min_dists = np.concatenate((min_dists1, min_dists2))
+
+    # --- Disk Destruction vs Closest Separation Plot ---
+    fig, ax = plt.subplots(figsize=(12,8))
+    scat = ax.scatter(min_dists, bf_mins, c=mass_ratios, cmap="plasma")
+    ax.hlines(0.5, min(min_dists), max(min_dists), linestyles="--")
+    ax.set_xlabel("Closest Separation [AU]")
+    ax.set_ylabel("Minimum Bound fraction")
+    cbar = plt.colorbar(scat, ax=ax)
+    cbar.set_label('Mass Ratio (M_p / M_s)')
+    ax.set_title("Disk Destruction vs Closest Separation")
+    fig.savefig(f"PLOT/{plotname_tot}.png")
+
+    
+    # --- Histogram of bound fraction of particles ---
+    fig, ax = plt.subplots(figsize=(12,8))
+    ax.hist(bf_mins)
+    ax.set_xlabel("Fraction of bound particles")
+    ax.set_ylabel("Amount")
+    # --- calculate fraction of destroyed disks (bound frac < 0.5)
+    # Convert dictionary values to a NumPy array first
+    mask_destroyed = bf_mins < 0.5
+    destroyed_frac = np.sum(mask_destroyed) / 200 # number of stars.in the combined cluster
+    fig.suptitle(f"Fraction of destroyed disks (<0.5): {destroyed_frac:.4f}")
+    fig.savefig(f"PLOT/Hist_{plotname_tot}.png")
+
+
+
 if __name__ == "__main__":
-    distVlostPlot_fromData()
+    #distVlostPlot_fromData()
+    combined_plot_DiskDestruction()
