@@ -6,7 +6,7 @@ from amuse.couple import bridge
 from amuse.ext.protodisk import ProtoPlanetaryDisk
 import pandas as pd
 
-from functions import get_bound_particles_fraction, write_bound_frac, calculate_energy, plot_energy_evolution, bound_fraction_plot
+from functions import get_bound_particles_fraction, calculate_energy, bound_fraction_plot, EffectOnBoundPlot_fromData
 
 
 # --- Simulation Codes ---
@@ -321,6 +321,8 @@ def run_all_cluster_sims(interactions_file):
 
     # --- Main Simulation Loop ---
     for idx, mc_star in enumerate(stars_with_interactions):
+        if idx < 57:
+            continue
         # Create a subset of the dataframe for the current target star
         mask = (df["particle1_id"] == mc_star)
         interactions = df[mask]
@@ -391,11 +393,11 @@ def run_all_cluster_sims(interactions_file):
             temp_star, temp_disk, pos_list, vel_list = simulate_disk_new(star, perturber, disk, f"DISK/DiskSave__{save_name}.amuse", t_sim=t_sim)
             
             # Save raw trajectory data
-            filename_pos = f"DATA/FullRun0ClusVelPosAU__{save_name}.npy"
-            filename_vel = f"DATA/FullRun0ClusVelVelKMS__{save_name}.npy"
+            filename_pos = f"DATA/FullRun160ClusVelPosAU__{save_name}.npy"
+            filename_vel = f"DATA/FullRun160ClusVelVelKMS__{save_name}.npy"
             np.save(filename_pos, pos_list)
             np.save(filename_vel, vel_list)
-            load_and_plot_data(filename_pos, filename_vel, PlotName=f"FullRun0ClusVel_{idx}_{i}")
+            load_and_plot_data(filename_pos, filename_vel, PlotName=f"FullRun160ClusVel_{idx}_{i}")
 
             # find closest approach and fraction of particles lost during this encounter
             min_dist = np.min(np.absolute(np.linalg.norm(pos_list[1], axis=1) - np.linalg.norm(pos_list[0], axis=1)))
@@ -408,7 +410,7 @@ def run_all_cluster_sims(interactions_file):
             else:
                 frac_lost.append(0.0)
 
-    bound_fraction_plot(enc_dists, frac_lost, PlotName=f"DistVSLost0ClusVel__{save_name}")
+    bound_fraction_plot(enc_dists, frac_lost, PlotName=f"DistVSLost160ClusVel__{save_name}")
 
 
 def run_sim_2disk(interactions_file, s1id, s2id, index=0, t_sim=500|units.yr):
@@ -918,19 +920,20 @@ def load_disk(filename):
     return stars[0], disk
 
 
+
 # --- Examples for Usage ---
 if __name__ == "__main__":
-    #print("ATTENTION: The filenames and IDs will have to be adapted to existing files!")
+    print("ATTENTION: The filenames and IDs will have to be adapted to existing files!")
 
     # --- run all sims from interaction file ---
-    #run_all_cluster_sims("Cluster_velocity_0_good.csv")
+    #run_all_cluster_sims("Cluster_velocity_160_good.csv")
 
     # --- run sim with disks around both stars for stars specified
     #run_sim_2disk("Interactions stopping conditions_100Myr.csv", 113871276108901526, 15793569915568245741, t_sim=500|units.yr)
     
     # --- make animation from the data files provided
-    fp = "Data/FullRunNewPosAU__100448.652139Myr_40_0_1000_1.076_9.331.npy"
-    fv = "Data/FullRunNewVelKMS__100448.652139Myr_40_0_1000_1.076_9.331.npy"
-    load_and_animate_data(fp, fv)
+    #fp = "Data/FullRunNewPosAU__100448.652139Myr_40_0_1000_1.076_9.331.npy"
+    #fv = "Data/FullRunNewVelKMS__100448.652139Myr_40_0_1000_1.076_9.331.npy"
+    #load_and_animate_data(fp, fv)
 
 
