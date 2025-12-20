@@ -770,8 +770,51 @@ def statiscit_what_initial_condition_set_to_have_interaction(data, initial_state
     print("affected_distance_to_other_star", np.median(affected_distance_to_other_star), np.mean(affected_distance_to_other_star), np.std(affected_distance_to_other_star))
     print("unaffected_distance_to_other_star", np.median(unaffected_distance_to_other_star), np.mean(unaffected_distance_to_other_star), np.std(unaffected_distance_to_other_star))
 
-    
+def how_many_pairs_during_time(data, time1, time2):    
+    """
+    Analyze how many unique star pairs have interactions over time.
+    Parameters  
+    ----------
+    data : pandas.DataFrame
+        Interaction table containing at least the columns:
+        - 'time (yr)'
+        - 'particle1_id'
+        - 'particle2_id'
+        Each row represents an interaction between two stars.
+    Returns
+    -------
+    time_series : list of tuples
+        Each tuple contains (time, unique_pair_count) representing the number of unique star pairs that have interacted up to that time.
+    """
+    p1 = data["particle1_id"].values
+    p2 = data["particle2_id"].values
 
+    
+    interactions = pd.DataFrame({
+        'id_min': np.minimum(p1, p2),
+        'id_max': np.maximum(p1, p2),
+        'time': data['time (yr)']
+    })
+
+    first_encounters = interactions.groupby(['id_min', 'id_max'])['time'].min()
+
+    # 3. Obliczenie statystyk
+    total_unique_pairs = len(first_encounters)
+
+    if total_unique_pairs > 0:
+        # 1 Myr = 1,000,000 lat
+        count_1Myr = (first_encounters <= time1).sum()
+        
+        # 10 Myr = 10,000,000 lat
+        count_10Myr = (first_encounters <= time2).sum()
+        fraction_1Myr = count_1Myr / total_unique_pairs
+        fraction_10Myr = count_10Myr / total_unique_pairs
+
+        print(f"Total unique pairs: {total_unique_pairs}")
+        print(f"Interactions within {time1/1e6} Myr: {fraction_1Myr:.2%} ({count_1Myr})")
+        print(f"Interactions within {time2/1e6} Myr: {fraction_10Myr:.2%} ({count_10Myr})")
+    else:
+        print("No interactions in the data.")    
 
 
 
@@ -784,7 +827,22 @@ if __name__ == "__main__":
     position_y = 0 
     position_z = 0
     encounter_radious = 500 | units.AU
+    t_end = 100 | units.Myr
+    dt = 0.1 | units.Myr
+    MWG = MilkyWay_galaxy()
+    t = 0 | units.Myr
+    limit = 0.001 |units.AU
+    name = "interactions.csv"
+
     seed = 109
+
+    thresholds = [1000, 500, 250, 125, 75, 38]
+
+    time1 = 1e6  # 1 Myr in years
+    time2 = 1e7  # 10 Myr in years
+
+
+
     cluster, converter = starting_conditions_cluster(number_of_stars, velocity_x, velocity_y, velocity_z, position_x, position_y, position_z, encounter_radious, seed)
     
     #write_set_to_file(cluster, "cluster.csv", "csv")
@@ -796,15 +854,10 @@ if __name__ == "__main__":
 
     K, U, Q, E = get_internal_energy(cluster)
 
-    t_end = 100 | units.Myr
-    dt = 0.1 | units.Myr
-    MWG = MilkyWay_galaxy()
-    t = 0 | units.Myr
-    limit = 0.001 |units.AU
 
     interactions_list, t_history, x_history, y_history, z_history, center_of_mass_history, bound_history, bound_mass_history, t_energy, energy_overtime, Q_overtime, final_cluster = run_evolution(t_end, dt, t, cluster, MWG, limit)
 
-    clean_rows = save_file_with_interactions(interactions_list, "interactions.csv")
+    clean_rows = save_file_with_interactions(interactions_list, name)
 
     plot_trajectory_xy(x_history, y_history)
 
@@ -815,12 +868,12 @@ if __name__ == "__main__":
     data = start_analyzis_get_pandas_dataframe()
 
     #Thershols - the list of radious limits to check  - remember the number is a sum of radious of 2 stars
-    thresholds = [1000, 500, 250, 125, 75, 38]
+    
     number_of_stars_with_interaction = how_many_stars_have_interaction(data, thresholds, number_of_stars)
 
     print_interesting_interactions(data)
 
-    #TODO: energy plot
-
     plot_initial_and_ending_position_color_by_interactions(data, df_initial)
     statiscit_what_initial_condition_set_to_have_interaction(data, df_initial)
+
+    how_many_pairs_during_time(data, time1, time2)
