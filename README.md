@@ -18,6 +18,7 @@ Code and Content regarding the AMUSE Project from Group 11
 
 ### Making the Disk Encounter Simulation
 - all relevant functions for this can be found in the "SimulateDisk.py" file
+- Important: the directories "Data", "PLOT", "DISK", and "ANIM" have to exist in the directory that this is run in
 - to run all the simulations of a cluster file, use the "run_all_cluster_sims(filename)" function, where filename is the name of your cluster.csv file
 - to make a single simulation with disks around both stars use the "run_sim_2disk(filename, StarID1, StarID2)" function, where filename is the name of your cluster.csv file and the Star IDs are to specify the encounter that should be simulated and have to be looked up in the csv file. If you do not want the first encounter between 2 stars, use the "index" parameter.
 
