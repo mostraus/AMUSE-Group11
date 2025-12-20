@@ -14,8 +14,26 @@ Code and Content regarding the AMUSE Project from Group 11
 
 ## How to run the simulation properly:
 ### Making the cluster
-- CLUSTER INSTRUCTIONS
+- all relevant  functions for this can be found in the "cluster_evolution.py" file. If someone prefers the same functionality is also accessible in jupyter notebook "stopping_conditions.ipynb"
+- To get simulation it is needed to set intitial conditions of a cluster in main - number of stars, velocity (vx,vy,vz), position (x,y,z) and encounter radious. And simulation conditions like time (t_end), step of gravity code if there is no collisions (dt, do not make it to big), starting time (t, the best choice 0) and limit after which we assume the stars collide (limit). As well as name (name) of a file to save the interactions
+- The functions starting_conditions_cluster , run_evolution and save_file_with_interactions need to be run. This will produce the csv file named "name" which will be used for stage 2 - disc Encounter Simulation
+- There is possibility but no need to use seet in "run_evolution" to ensure that the masses of stars in a cluster will not change between runs.
 
+### Additional Functions cluster analysys
+- There is a possibility to reuse the same cluster by singing the same seed while runing "run_evolution" and then saving it to csv file by function write_set_to_file. Then it can be read by function "read_set_from_file". Important if you are using the saved cluster you still NEED to run function "starting_conditions_cluster".
+- You can plot the starting positions of a star in a cluster in XY axes by "plot_the_starting_cluster_position_xy".
+- If you want to analyse the cluster evolution you shoud run "save_initial_state_of_cluster" and "get_internal_energy" to have more informations about starting parameters
+- For the full functionalities functions "plot_the_starting_cluster_position_xy", "save_initial_state_of_cluster" and "get_internal_energy" need to be run before "run_evolution".
+- The trajectory of a cluster can be plot with function "plot_trajectory_xy"
+- THe animation of this trajectory "animate_trajectory_xy"
+- To analyse the the history of an evolution is need to run "save_initial_state_of_cluster" before simulation ("run_evolution") and "start_analyzis_get_pandas_dataframe" after it. If you do not do so non of functions mentioned belowe will be working.
+- "plot_initial_and_ending_position_color_by_interactions" shows two plots first with starting positions second with ending positions. The size of dots depend on their mass and colors indicate if they had or not had an encounter.
+- "how_many_stars_have_interaction" - needs to get the list of thresholds and then print how many stars have an interaction closer than limits in a list.
+- "how_many_pairs_during_time" - need to get two numbers and print how many unique pairs had an interations before that time
+- "print_interesting_interactions" - print the key of stars with interaction with the biggest mass ratio between stars, and the star with the most interactions - usefull to choose the interaction for second stage
+- "statiscit_what_initial_condition_set_to_have_interaction" - print statistical information about stars which have and do not have close encounter like mean, median and standard deviation of a mass, velocity and others
+
+  
 ### Making the Disk Encounter Simulation
 - all relevant functions for this can be found in the "SimulateDisk.py" file
 - Important: the directories "Data", "PLOT", "DISK", and "ANIM" have to exist in the directory that this is run in
