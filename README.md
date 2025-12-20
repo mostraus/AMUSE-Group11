@@ -19,13 +19,13 @@ Code and Content regarding the AMUSE Project from Group 11
 - The functions starting_conditions_cluster , run_evolution and save_file_with_interactions need to be run. This will produce the csv file named "name" which will be used for stage 2 - disc Encounter Simulation
 - There is possibility but no need to use seet in "run_evolution" to ensure that the masses of stars in a cluster will not change between runs.
 
-### Additional Functions cluster analysys
-- There is a possibility to reuse the same cluster by singing the same seed while runing "run_evolution" and then saving it to csv file by function write_set_to_file. Then it can be read by function "read_set_from_file". Important if you are using the saved cluster you still NEED to run function "starting_conditions_cluster".
+### Additional Functions cluster analysis
+- There is a possibility to reuse the same cluster by using the same seed while runing "run_evolution" and then saving it to csv file by function write_set_to_file. Then it can be read by function "read_set_from_file". Important if you are using the saved cluster you still NEED to run function "starting_conditions_cluster".
 - You can plot the starting positions of a star in a cluster in XY axes by "plot_the_starting_cluster_position_xy".
 - If you want to analyse the cluster evolution you shoud run "save_initial_state_of_cluster" and "get_internal_energy" to have more informations about starting parameters
 - For the full functionalities functions "plot_the_starting_cluster_position_xy", "save_initial_state_of_cluster" and "get_internal_energy" need to be run before "run_evolution".
 - The trajectory of a cluster can be plot with function "plot_trajectory_xy"
-- THe animation of this trajectory "animate_trajectory_xy"
+- The animation of this trajectory "animate_trajectory_xy"
 - To analyse the the history of an evolution is need to run "save_initial_state_of_cluster" before simulation ("run_evolution") and "start_analyzis_get_pandas_dataframe" after it. If you do not do so non of functions mentioned belowe will be working.
 - "plot_initial_and_ending_position_color_by_interactions" shows two plots first with starting positions second with ending positions. The size of dots depend on their mass and colors indicate if they had or not had an encounter.
 - "how_many_stars_have_interaction" - needs to get the list of thresholds and then print how many stars have an interaction closer than limits in a list.
