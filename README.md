@@ -12,6 +12,21 @@ Code and Content regarding the AMUSE Project from Group 11
 
 **Why interesting**: Connects disk survival to galactic dynamics.
 
+## How to run the simulation properly:
+### Making the cluster
+- CLUSTER INSTRUCTIONS
+
+### Making the Disk Encounter Simulation
+- all relevant functions for this can be found in the "SimulateDisk.py" file
+- to run all the simulations of a cluster file, use the "run_all_cluster_sims(filename)" function, where filename is the name of your cluster.csv file
+- to make a single simulation with disks around both stars use the "run_sim_2disk(filename, StarID1, StarID2)" function, where filename is the name of your cluster.csv file and the Star IDs are to specify the encounter that should be simulated and have to be looked up in the csv file. If you do not want the first encounter between 2 stars, use the "index" parameter.
+
+### Additional Functions
+- making animation is possible with "load_and_animate_data(fp, fv)", where fp and fv are the filenames where the position and velocity data are stored, respectively.
+- additional analysis plots can be made with "EffectOnBoundPlot_fromData(RunName, PlotName)" from the functions.py file, where the RunName is the first part of the Simulation run and PlotName is the prefix of the name for the resulting plots.
+
+All the functions also have a documentation explaining there usage in further detail!
+
 ## Notes
 - Run stage 1 of LonelyPlanets 
 - Star cluster in potential of galaxy
