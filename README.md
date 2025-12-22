@@ -21,6 +21,7 @@ Code and Content regarding the AMUSE Project from Group 11
 
 ### Additional Functions cluster analysis
 - There is a possibility to reuse the same cluster by using the same seed while running `run_evolution` and then saving it to csv file with the function `write_set_to_file`. Then it can be read by function `read_set_from_file`. Important: if you are using the saved cluster you still NEED to run function `starting_conditions_cluster`.
+- The galaxy potential can be change with changing the class 'MilkyWay_galaxy' or bilding the new class and MGW = 'new_class'
 - You can plot the starting positions of a star in a cluster in XY axes with `plot_the_starting_cluster_position_xy`.
 - If you want to analyse the cluster evolution you shoud run `save_initial_state_of_cluster` and `get_internal_energy` to have more informations about starting parameters
 - For the full functionalities functions `plot_the_starting_cluster_position_xy`, `save_initial_state_of_cluster` and `get_internal_energy` need to be run before `run_evolution`.
